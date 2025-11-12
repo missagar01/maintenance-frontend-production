@@ -37,7 +37,7 @@ const Machines = () => {
   const [loaderSheetData, setLoaderSheetData] = useState(false);
 
 // const API_URL = "http://18.60.212.185:5050/api/machines";
-// const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 const API_URL = `${BACKEND_URL}/machines`;
 
 const fetchSheetData = async () => {
