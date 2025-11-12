@@ -58,10 +58,10 @@ useEffect(() => {
   const fetchDashboardData = async () => {
     try {
      const [statsRes, machineCostRes, deptRes, freqRes] = await Promise.all([
-  axios.get(`${BACKEND_URL}/api/dashboard/stats`),
-  axios.get(`${BACKEND_URL}/api/dashboard/maintenance-costs`),
-  axios.get(`${BACKEND_URL}/api/dashboard/department-costs`),
-  axios.get(`${BACKEND_URL}/api/dashboard/frequencies`)
+  axios.get(`${BACKEND_URL}dashboard/stats`),
+  axios.get(`${BACKEND_URL}dashboard/maintenance-costs`),
+  axios.get(`${BACKEND_URL}dashboard/department-costs`),
+  axios.get(`${BACKEND_URL}dashboard/frequencies`)
 ]);
 
 

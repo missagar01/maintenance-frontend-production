@@ -57,6 +57,9 @@ function AssignTask() {
   // const REPAIR_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwuV7jpPBbsRCe_6Clke9jfkk32GStqyzaCve0jK1qlPcyfBNW3NG-GB7dE12UiZH7E/exec";
   // const REPAIR_SHEET_ID = "1-j3ydNhMDwa-SfvejOH15ow7ZZ10I1zwdV4acAirHe4";
 
+
+  const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+
   // Fetch departments from FormResponses sheet column J
   const fetchDepartments = () => {
     if (sheetData.length > 0) {
@@ -70,8 +73,9 @@ function AssignTask() {
   // ✅ Fetch machines dynamically from backend (Postgres)
 const fetchMachinesByDepartment = async (department) => {
   try {
-    const res = await fetch(
-      `http://18.60.212.185:5050/api/form-responses?department=${department}`
+    // const res = await fetch(
+    //   `http://18.60.212.185:5050/api/form-responses?department=${department}`
+    const res = await fetch(`${BACKEND_URL}/form-responses?department=${department}`
     );
     const result = await res.json();
 
@@ -122,9 +126,15 @@ const handleMachineChange = async (machineName) => {
   if (!machineName) return;
 
   try {
+    // const res = await fetch(
+    //   `http://18.60.212.185:5050/api/form-responses?department=${selectedDepartment}&machine_name=${machineName}`
+    // );
+
+
     const res = await fetch(
-      `http://18.60.212.185:5050/api/form-responses?department=${selectedDepartment}&machine_name=${machineName}`
-    );
+  `${BACKEND_URL}/form-responses?department=${selectedDepartment}&machine_name=${machineName}`
+);
+
     const result = await res.json();
 
     if (result.success && result.data && result.data[0]?.serial_no) {
@@ -143,7 +153,8 @@ const handleMachineChange = async (machineName) => {
   // 🧠 Fetch dropdown data from backend API (Postgres)
 const fetchDropdownData = async () => {
   try {
-    const res = await fetch("http://18.60.212.185:5050/api/dropdown");
+    // const res = await fetch("http://18.60.212.185:5050/api/dropdown");
+    const res = await fetch(`${BACKEND_URL}/dropdown`);
     const result = await res.json();
 
     if (result.success && result.data) {
@@ -222,7 +233,9 @@ const fetchDropdownData = async () => {
 // Machine list and department data now come from backend
 const fetchSheetData = async () => {
   try {
-    const res = await fetch("http://18.60.212.185:5050/api/form-responses");
+    // const res = await fetch("http://18.60.212.185:5050/api/form-responses");
+    const res = await fetch(`${BACKEND_URL}/form-responses`);
+
     const result = await res.json();
     if (result.success && result.data) {
       setSheetData(result.data);
@@ -234,7 +247,8 @@ const fetchSheetData = async () => {
 
 const fetchWorkingDaysCalendar = async () => {
   try {
-    const res = await fetch("http://18.60.212.185:5050/api/working-days");
+    // const res = await fetch("http://18.60.212.185:5050/api/working-days");
+    const res = await fetch(`${BACKEND_URL}/working-days`);
     const result = await res.json();
     if (result.success && result.data) {
       setWorkingDaysData(result.data);
@@ -719,7 +733,8 @@ const workingDays = workingDaysData.map(
     setLoaderSubmit(true);
 
     // 🧠 Backend API endpoint (change to your deployed URL if needed)
-    const API_URL = "http://18.60.212.185:5050/api/maintenance-tasks";
+    // const API_URL = "http://18.60.212.185:5050/api/maintenance-tasks";
+    const API_URL = `${BACKEND_URL}/maintenance-tasks`;
 
     // ✅ MAINTENANCE type submission
     if (selectedTaskType === "Maintenance") {
@@ -788,7 +803,8 @@ const workingDays = workingDaysData.map(
 
     // ✅ REPAIR type submission
     else if (selectedTaskType === "Repair") {
-      const REPAIR_API_URL = "http://18.60.212.185:5050/api/repair-tasks"; // optional route if you make one
+      // const REPAIR_API_URL = "http://18.60.212.185:5050/api/repair-tasks"; // optional route if you make one
+      const REPAIR_API_URL = `${BACKEND_URL}/repair-tasks`;
 
       const payload = {
         task_no: `RP-${Date.now()}`,
