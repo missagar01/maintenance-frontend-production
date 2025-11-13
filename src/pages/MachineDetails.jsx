@@ -67,7 +67,6 @@ const MachineDetails = ({ machine, goBack }) => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
   console.log(API_BASE_URL)
 
-
   
   // Enhanced formatSheetData with better error handling
   const formatSheetData = (sheetData) => {
@@ -105,7 +104,7 @@ const fetchMaintenanceHistory = async () => {
   try {
     // const res = await axios.get(`${API_BASE_URL}/${machine["Serial No"]}/history`);
     const res = await axios.get(
-  `${API_BASE_URL}/${encodeURIComponent(machine["Serial No"])}/history`
+  `${API_BASE_URL}/machine-details/${encodeURIComponent(machine["Serial No"])}/history`
 );
 
     if (res.data.success) {
@@ -261,7 +260,7 @@ const handleSave = async () => {
 
     // Send to Express → PostgreSQL
     const res = await axios.put(
-      `${API_BASE_URL}/${encodeURIComponent(serial)}`,
+      `${API_BASE_URL}/machine-details/${encodeURIComponent(serial)}`,
       payload
     );
 
