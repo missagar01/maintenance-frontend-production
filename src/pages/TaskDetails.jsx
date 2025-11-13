@@ -41,7 +41,8 @@ const fetchPendingTasksFromBackend = async () => {
     setLoading(true);
 
     // Make sure machineName or taskNo is known first
-    let machine = machineName || "demo2"; // fallback if not yet set
+    // let machine = machineName || "demo2"; // fallback if not yet set
+    let machine = machineName;
     const encodedMachine = encodeURIComponent(machine);
     const encodedSerial = encodeURIComponent(serialNo);
 
@@ -181,10 +182,38 @@ const fetchCompletedTasksFromBackend = async () => {
     }
   };
 
+  useEffect(() => {
+  const loadMachineName = async () => {
+    try {
+      const res = await axios.get(
+        `${BACKEND_URL}/task-details/${taskNo}/${encodeURIComponent(serialNo)}/${taskType}`
+      );
+      if (res.data.success) {
+        const { machineName } = res.data.data;
+        console.log("✅ Machine Name fetched:", machineName);
+        setMachineName(machineName);
+      }
+    } catch (error) {
+      console.error("❌ Error fetching machine name:", error);
+      toast.error("Failed to fetch machine details");
+    }
+  };
+
+  loadMachineName();
+}, [taskNo, serialNo, taskType]);
+
 useEffect(() => {
+  if (!machineName) return; // wait until machine name fetched
+  console.log("🔁 Fetching tasks for:", machineName);
   fetchPendingTasksFromBackend();
   fetchCompletedTasksFromBackend();
-}, [taskNo, serialNo]);
+}, [machineName]);
+
+
+// useEffect(() => {
+//   fetchPendingTasksFromBackend();
+//   fetchCompletedTasksFromBackend();
+// }, [taskNo, serialNo]);
 
 
 

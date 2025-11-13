@@ -59,10 +59,15 @@ const MachineDetails = ({ machine, goBack }) => {
 
   const { serialNo } = useParams();
 
-  const SCRIPT_URL =
-    "https://script.google.com/macros/s/AKfycbzudKkY63zbthWP_YcfyF-HnUOObG_XM9aS2JDCmTmcYLaY1OQq7ho6i085BXxu9N2E7Q/exec";
-  const SHEET_Id = "15SBKzTJKzaqhjPI5yt5tKkrd3tzNuhm_Q9-iDO8n0B0";
+  // const SCRIPT_URL =
+  //   "https://script.google.com/macros/s/AKfycbzudKkY63zbthWP_YcfyF-HnUOObG_XM9aS2JDCmTmcYLaY1OQq7ho6i085BXxu9N2E7Q/exec";
+  // const SHEET_Id = "15SBKzTJKzaqhjPI5yt5tKkrd3tzNuhm_Q9-iDO8n0B0";
 
+
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5050/api/machine-details";
+
+
+  
   // Enhanced formatSheetData with better error handling
   const formatSheetData = (sheetData) => {
     // Check if sheetData exists and has the expected structure
@@ -89,6 +94,50 @@ const MachineDetails = ({ machine, goBack }) => {
       return [];
     }
   };
+
+
+
+const fetchMaintenanceHistory = async () => {
+  if (!machine || !machine["Serial No"]) return;
+
+  setLoadingTasks(true);
+  try {
+    // const res = await axios.get(`${API_BASE_URL}/${machine["Serial No"]}/history`);
+    const res = await axios.get(
+  `${API_BASE_URL}/${encodeURIComponent(machine["Serial No"])}/history`
+);
+
+    if (res.data.success) {
+      const tasks = res.data.data || [];
+      setHistoryMaitenenceTasks(tasks);
+
+      const totalCost = tasks.reduce((sum, t) => sum + (parseFloat(t.maintenance_cost) || 0), 0);
+      setTotalMaintenanceCost(totalCost);
+      setMaintenanceCount(tasks.length);
+
+      const purchasePrice = parseFloat(machine["Purchase Price"] || 0);
+      const ratio = purchasePrice > 0 ? (totalCost * 100) / purchasePrice : 0;
+      setPercentMaintenanceToPurchase(ratio);
+
+      // Temperature chart data
+      const tempData = tasks
+        .filter((t) => t.temperature_status)
+        .map((t) => ({
+          time: t.task_start_date ? new Date(t.task_start_date).toLocaleDateString() : "N/A",
+          temp: Number(t.temperature_status),
+        }));
+
+      setTemperatureGraphData(tempData);
+    }
+  } catch (err) {
+    console.error("Error fetching history:", err);
+    toast.error("Failed to fetch maintenance history");
+  } finally {
+    setLoadingTasks(false);
+  }
+};
+
+
 
   // Initialize edit form data when machine data is available
   useEffect(() => {
@@ -180,76 +229,47 @@ const MachineDetails = ({ machine, goBack }) => {
     }));
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      // Get the original serial number from machine data
-      const originalSerialNo = machine?.["Serial No"];
-
-      console.log("🔍 UPDATE DEBUG:", {
-        originalSerialNo: originalSerialNo,
-        originalSerialNoType: typeof originalSerialNo,
-        newSerialNo: editFormData.serialNumber,
-        machineData: machine
-      });
-
-      if (!originalSerialNo) {
-        toast.error("❌ Original serial number not found. Cannot update machine.");
-        setSaving(false);
-        return;
-      }
-
-      // Prepare the payload for updateMachine action
-      const payload = {
-        action: "updateMachine", // Use the correct action name
-        sheetName: "FormResponses",
-        serialNo: originalSerialNo.toString().trim(), // This is used to find the row
-        "Serial No": editFormData.serialNumber?.toString().trim() || "",
-        "Machine Name": editFormData.machineName || "",
-        "Model No": editFormData.model || "",
-        "Manufacturer": editFormData.manufacturer || "",
-        "Department": editFormData.department || "",
-        "Location": editFormData.location || "",
-        "Purchase Date": formatDateForSheet(editFormData.purchaseDate) || "",
-        "Purchase Price": editFormData.purchasePrice || "",
-        "Vendor": editFormData.vendor || "",
-        "Warranty Expiration": formatDateForSheet(editFormData.warrantyExpiration) || "",
-        "Initial Maintenance Date": formatDateForSheet(editFormData.initialMaintenanceDate) || "",
-        "Notes": editFormData.note || "",
-        "Tag No": editFormData.tagNo || "",
-        "User Allot": editFormData.userAllot || "",
-      };
-
-      console.log("📤 Sending UPDATE payload to Google Sheets:", payload);
-
-      const response = await fetch(SCRIPT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams(payload).toString(),
-      });
-
-      const result = await response.json();
-      console.log("📥 Response from Google Sheets:", result);
-
-      if (result.success) {
-        toast.success("✅ Machine updated successfully!");
-        setIsEditing(false);
-        // Reload the page to reflect changes
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      } else {
-        toast.error("❌ Failed to update machine: " + (result.error || "Unknown error"));
-      }
-    } catch (error) {
-      console.error("Error updating machine:", error);
-      toast.error("❌ Network error. Please try again.");
-    } finally {
-      setSaving(false);
+const handleSave = async () => {
+  setSaving(true);
+  try {
+    const serial = machine?.["Serial No"];
+    if (!serial) {
+      toast.error("Missing Serial No — cannot update");
+      return;
     }
-  };
+
+    const payload = {
+      machine_name: editFormData.machineName,
+      model_no: editFormData.model,
+      manufacturer: editFormData.manufacturer,
+      department: editFormData.department,
+      location: editFormData.location,
+      purchase_date: editFormData.purchaseDate,
+      purchase_price: editFormData.purchasePrice,
+      vendor: editFormData.vendor,
+      warranty_expiration: editFormData.warrantyExpiration,
+      initial_maintenance_date: editFormData.initialMaintenanceDate,
+      notes: editFormData.note,
+      tag_no: editFormData.tagNo,
+      user_allot: editFormData.userAllot,
+    };
+
+    const res = await axios.put(`${API_BASE_URL}/${serial}`, payload);
+    if (res.data.success) {
+      toast.success("✅ Machine updated successfully");
+      setIsEditing(false);
+      setTimeout(() => window.location.reload(), 800);
+    } else {
+      toast.error("❌ Failed to update");
+    }
+  } catch (err) {
+    console.error(err);
+    toast.error("Error saving machine");
+  } finally {
+    setSaving(false);
+  }
+};
+
 
   const fetchMaintenceTasks = async () => {
     if (!machine || !machine["Serial No"]) {
@@ -443,12 +463,12 @@ const MachineDetails = ({ machine, goBack }) => {
     }
   };
 
-  useEffect(() => {
-    if (machine && machine["Serial No"]) {
-      fetchMaintenceTasks();
-      fetchRepairTasks();
-    }
-  }, [machine]);
+useEffect(() => {
+  if (machine && machine["Serial No"]) {
+    fetchMaintenanceHistory();
+  }
+}, [machine]);
+
 
   const getMonthlyRepairCosts = () => {
     const monthlyCosts = {};

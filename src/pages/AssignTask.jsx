@@ -61,14 +61,20 @@ function AssignTask() {
   const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
   // Fetch departments from FormResponses sheet column J
-  const fetchDepartments = () => {
-    if (sheetData.length > 0) {
-      const departments = [...new Set(sheetData.map(item => item["Department"]))]
-        .filter(Boolean)
-        .sort();
-      setDepartmentOptions(departments);
+const fetchDepartments = async () => {
+  try {
+    const res = await fetch(`${BACKEND_URL}/department`);
+    const result = await res.json();
+
+    if (result.success && result.data) {
+      setDepartmentOptions(result.data);
     }
-  };
+  } catch (err) {
+    console.error("Department fetch error:", err);
+    toast.error("❌ Failed to fetch departments");
+  }
+};
+
 
   // ✅ Fetch machines dynamically from backend (Postgres)
 const fetchMachinesByDepartment = async (department) => {
@@ -121,26 +127,55 @@ const handleDepartmentChange = async (department) => {
 
 
   // Handle machine change
+// const handleMachineChange = async (machineName) => {
+//   setSelectedMachine(machineName);
+//   if (!machineName) return;
+
+//   try {
+//     // const res = await fetch(
+//     //   `http://18.60.212.185:5050/api/form-responses?department=${selectedDepartment}&machine_name=${machineName}`
+//     // );
+
+
+//     const res = await fetch(
+//   `${BACKEND_URL}/form-responses?department=${selectedDepartment}&machine_name=${machineName}`
+// );
+
+//     const result = await res.json();
+
+//     if (result.success && result.data && result.data[0]?.serial_no) {
+//       setSelectedSerialNo(result.data[0].serial_no);
+//       toast.success(`✅ Serial found: ${result.data[0].serial_no}`);
+//     } else {
+//       toast.error("⚠️ No serial found for this machine");
+//     }
+//   } catch (error) {
+//     console.error("Serial fetch error:", error);
+//     toast.error("❌ Failed to fetch serial number");
+//   }
+// };
+
+
 const handleMachineChange = async (machineName) => {
   setSelectedMachine(machineName);
   if (!machineName) return;
 
   try {
-    // const res = await fetch(
-    //   `http://18.60.212.185:5050/api/form-responses?department=${selectedDepartment}&machine_name=${machineName}`
-    // );
-
-
     const res = await fetch(
-  `${BACKEND_URL}/form-responses?department=${selectedDepartment}&machine_name=${machineName}`
-);
-
+      `${BACKEND_URL}/form-responses?department=${selectedDepartment}&machine_name=${machineName}`
+    );
     const result = await res.json();
 
-    if (result.success && result.data && result.data[0]?.serial_no) {
-      setSelectedSerialNo(result.data[0].serial_no);
-      toast.success(`✅ Serial found: ${result.data[0].serial_no}`);
+    if (result.success && result.data && result.data.length > 0) {
+      const serialNumbers = result.data
+        .map((m) => m.serial_no)
+        .filter(Boolean);
+
+      setFilteredSerials(serialNumbers); // ✅ fill dropdown list
+      setSelectedSerialNo(serialNumbers[0]); // optional: auto-select first
+      toast.success(`✅ Serial found: ${serialNumbers.join(", ")}`);
     } else {
+      setFilteredSerials([]); // clear old ones
       toast.error("⚠️ No serial found for this machine");
     }
   } catch (error) {
@@ -148,6 +183,7 @@ const handleMachineChange = async (machineName) => {
     toast.error("❌ Failed to fetch serial number");
   }
 };
+
 
 
   // 🧠 Fetch dropdown data from backend API (Postgres)
@@ -173,9 +209,10 @@ const fetchDropdownData = async () => {
 };
 
 
-  useEffect(() => {
-    fetchDepartments();
-  }, [sheetData]);
+useEffect(() => {
+  // fetchDepartments();   // <-- Fetch departments from correct route
+  fetchDropdownData();  // <-- Fetch other dropdowns
+}, []);
 
   useEffect(() => {
     filterMachinesByDepartment();
@@ -726,45 +763,181 @@ const workingDays = workingDaysData.map(
   // };
 
 
-  const handleSubmitForm = async (e) => {
+//   const handleSubmitForm = async (e) => {
+//   e.preventDefault();
+
+//   try {
+//     setLoaderSubmit(true);
+
+//     // 🧠 Backend API endpoint (change to your deployed URL if needed)
+//     // const API_URL = "http://18.60.212.185:5050/api/maintenance-tasks";
+//     const API_URL = `${BACKEND_URL}/maintenance-tasks`;
+
+//     // ✅ MAINTENANCE type submission
+//     if (selectedTaskType === "Maintenance") {
+//       if (generatedTasks.length === 0) {
+//         toast.error("❌ No generated tasks to assign. Please preview first.");
+//         return;
+//       }
+
+//       // Generate Task No dynamically
+//       const maintTasks = taskList.filter(
+//         (task) =>
+//           task["Task No"] &&
+//           typeof task["Task No"] === "string" &&
+//           task["Task No"].startsWith("TM-")
+//       );
+
+//       let lastTaskNo = 0;
+//       if (maintTasks.length > 0) {
+//         const taskNumbers = maintTasks.map((task) => {
+//           const numPart = task["Task No"].split("TM-")[1];
+//           return parseInt(numPart) || 0;
+//         });
+//         lastTaskNo = Math.max(...taskNumbers);
+//       }
+
+//       // ✅ Loop over generatedTasks and POST each one
+//       for (let i = 0; i < generatedTasks.length; i++) {
+//         const task = generatedTasks[i];
+//         const payload = {
+//           task_no: `TM-${String(lastTaskNo + i + 1).padStart(3, "0")}`,
+//           serial_no: selectedSerialNo,
+//           machine_name: selectedMachine,
+//           given_by: selectedGivenBy,
+//           doer_name: selectedDoerName,
+//           task_type: selectedTaskType,
+//           machine_area: machineArea,
+//           part_name: partName,
+//           need_sound_test: needSoundTask,
+//           temperature: temperature,
+//           enable_reminders: enableReminder ? "Yes" : "No",
+//           require_attachment: requireAttachment ? "Yes" : "No",
+//           task_start_date: `${task.dueDate.split(" ")[0]} ${startTime}:00`,
+//           frequency: frequency,
+//           description: description,
+//           priority: selectedPriority,
+//           department: selectedDepartment,
+//         };
+
+//         // 🟢 Send to backend
+//         const res = await fetch(API_URL, {
+//           method: "POST",
+//           headers: {
+//             "Content-Type": "application/json",
+//           },
+//           body: JSON.stringify(payload),
+//         });
+
+//         const result = await res.json();
+//         if (!result.success) {
+//           throw new Error(result.error || "Insert failed for a task");
+//         }
+//       }
+
+//       toast.success(`✅ ${generatedTasks.length} Maintenance Tasks assigned successfully!`);
+//     }
+
+//     // ✅ REPAIR type submission
+//     else if (selectedTaskType === "Repair") {
+//       // const REPAIR_API_URL = "http://18.60.212.185:5050/api/repair-tasks"; // optional route if you make one
+//       const REPAIR_API_URL = `${BACKEND_URL}/repair-tasks`;
+
+//       const payload = {
+//         task_no: `RP-${Date.now()}`,
+//         serial_no: selectedSerialNo,
+//         machine_name: selectedMachine,
+//         given_by: selectedGivenBy,
+//         doer_name: selectedDoerName,
+//         task_type: selectedTaskType,
+//         machine_area: machineArea,
+//         part_name: partName,
+//         need_sound_test: needSoundTask,
+//         temperature: temperature,
+//         enable_reminders: enableReminder ? "Yes" : "No",
+//         require_attachment: requireAttachment ? "Yes" : "No",
+//         task_start_date: `${startDate} ${startTime}:00`,
+//         frequency: "one-time",
+//         description: description,
+//         priority: selectedPriority,
+//         department: selectedDepartment,
+//       };
+
+//       const formData = new FormData();
+//       for (const [key, value] of Object.entries(payload)) {
+//         formData.append(key, value);
+//       }
+
+//       if (imageFile) {
+//         formData.append("task_image", imageFile);
+//       }
+
+//       const res = await fetch(REPAIR_API_URL, {
+//         method: "POST",
+//         body: formData,
+//       });
+
+//       const result = await res.json();
+//       if (!result.success) throw new Error(result.error || "Repair task insert failed");
+
+//       toast.success("✅ Repair Task assigned successfully!");
+//     }
+
+//     // ✅ Clear form after success
+//     setSelectedSerialNo("");
+//     setSelectedMachine("");
+//     setSelectedGivenBy("");
+//     setSelectedDoerName("");
+//     setSelectedTaskType("Select Task Type");
+//     setStartDate("");
+//     setEndDate("");
+//     setEndTaskDate("");
+//     setFrequency("");
+//     setWorkDescription("");
+//     setSelectedPriority("");
+//     setShowTaskPreview(false);
+//     setStartTime("");
+//     setEndTime("");
+//     setEnableReminder(false);
+//     setRequireAttachment(false);
+//     setMachineArea("");
+//     setPartName("");
+//     setNeedSoundTask("");
+//     setTemperature("");
+//     setImageFile(null);
+//     setGeneratedTasks([]);
+//     setSelectedDepartment("");
+
+//   } catch (error) {
+//     console.error("❌ Submission failed:", error);
+//     toast.error(`❌ Failed to assign task: ${error.message}`);
+//   } finally {
+//     setLoaderSubmit(false);
+//   }
+// };
+
+const handleSubmitForm = async (e) => {
   e.preventDefault();
 
   try {
     setLoaderSubmit(true);
 
-    // 🧠 Backend API endpoint (change to your deployed URL if needed)
-    // const API_URL = "http://18.60.212.185:5050/api/maintenance-tasks";
+    // 🧠 Backend API endpoint (update if hosted elsewhere)
     const API_URL = `${BACKEND_URL}/maintenance-tasks`;
 
-    // ✅ MAINTENANCE type submission
+    // ✅ MAINTENANCE task submission
     if (selectedTaskType === "Maintenance") {
       if (generatedTasks.length === 0) {
         toast.error("❌ No generated tasks to assign. Please preview first.");
         return;
       }
 
-      // Generate Task No dynamically
-      const maintTasks = taskList.filter(
-        (task) =>
-          task["Task No"] &&
-          typeof task["Task No"] === "string" &&
-          task["Task No"].startsWith("TM-")
-      );
-
-      let lastTaskNo = 0;
-      if (maintTasks.length > 0) {
-        const taskNumbers = maintTasks.map((task) => {
-          const numPart = task["Task No"].split("TM-")[1];
-          return parseInt(numPart) || 0;
-        });
-        lastTaskNo = Math.max(...taskNumbers);
-      }
-
-      // ✅ Loop over generatedTasks and POST each one
+      // ✅ Loop over generated tasks and send each one
       for (let i = 0; i < generatedTasks.length; i++) {
         const task = generatedTasks[i];
+
         const payload = {
-          task_no: `TM-${String(lastTaskNo + i + 1).padStart(3, "0")}`,
+          // 🟢 No need for task_no — backend auto-generates
           serial_no: selectedSerialNo,
           machine_name: selectedMachine,
           given_by: selectedGivenBy,
@@ -783,12 +956,9 @@ const workingDays = workingDaysData.map(
           department: selectedDepartment,
         };
 
-        // 🟢 Send to backend
         const res = await fetch(API_URL, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
 
@@ -798,16 +968,17 @@ const workingDays = workingDaysData.map(
         }
       }
 
-      toast.success(`✅ ${generatedTasks.length} Maintenance Tasks assigned successfully!`);
+      toast.success(
+        `✅ ${generatedTasks.length} Maintenance Tasks assigned successfully!`
+      );
     }
 
-    // ✅ REPAIR type submission
+    // ✅ REPAIR task submission
     else if (selectedTaskType === "Repair") {
-      // const REPAIR_API_URL = "http://18.60.212.185:5050/api/repair-tasks"; // optional route if you make one
       const REPAIR_API_URL = `${BACKEND_URL}/repair-tasks`;
 
       const payload = {
-        task_no: `RP-${Date.now()}`,
+        task_no: `RP-${Date.now()}`, // optional unique ID for repair
         serial_no: selectedSerialNo,
         machine_name: selectedMachine,
         given_by: selectedGivenBy,
@@ -831,9 +1002,7 @@ const workingDays = workingDaysData.map(
         formData.append(key, value);
       }
 
-      if (imageFile) {
-        formData.append("task_image", imageFile);
-      }
+      if (imageFile) formData.append("task_image", imageFile);
 
       const res = await fetch(REPAIR_API_URL, {
         method: "POST",
@@ -841,7 +1010,8 @@ const workingDays = workingDaysData.map(
       });
 
       const result = await res.json();
-      if (!result.success) throw new Error(result.error || "Repair task insert failed");
+      if (!result.success)
+        throw new Error(result.error || "Repair task insert failed");
 
       toast.success("✅ Repair Task assigned successfully!");
     }
@@ -870,7 +1040,6 @@ const workingDays = workingDaysData.map(
     setImageFile(null);
     setGeneratedTasks([]);
     setSelectedDepartment("");
-
   } catch (error) {
     console.error("❌ Submission failed:", error);
     toast.error(`❌ Failed to assign task: ${error.message}`);
@@ -878,6 +1047,7 @@ const workingDays = workingDaysData.map(
     setLoaderSubmit(false);
   }
 };
+
 
   return (
     <div className="p-2">
