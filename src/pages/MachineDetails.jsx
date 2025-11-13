@@ -231,6 +231,7 @@ const fetchMaintenanceHistory = async () => {
 
 const handleSave = async () => {
   setSaving(true);
+
   try {
     const serial = machine?.["Serial No"];
     if (!serial) {
@@ -238,6 +239,7 @@ const handleSave = async () => {
       return;
     }
 
+    // Build clean payload for PostgreSQL
     const payload = {
       machine_name: editFormData.machineName,
       model_no: editFormData.model,
@@ -254,21 +256,35 @@ const handleSave = async () => {
       user_allot: editFormData.userAllot,
     };
 
-    const res = await axios.put(`${API_BASE_URL}/${serial}`, payload);
+    console.log("📤 Sending UPDATE to PostgreSQL:", payload);
+
+    // Send to Express → PostgreSQL
+    const res = await axios.put(
+      `${API_BASE_URL}/${encodeURIComponent(serial)}`,
+      payload
+    );
+
+    console.log("📥 PostgreSQL Response:", res.data);
+
     if (res.data.success) {
-      toast.success("✅ Machine updated successfully");
+      toast.success("Machine updated successfully");
       setIsEditing(false);
+
+      // Refresh UI
       setTimeout(() => window.location.reload(), 800);
     } else {
-      toast.error("❌ Failed to update");
+      toast.error("Failed to update the machine");
     }
+
   } catch (err) {
-    console.error(err);
-    toast.error("Error saving machine");
+    console.error("❌ Update error:", err);
+    toast.error("Error updating machine");
   } finally {
     setSaving(false);
   }
 };
+
+
 
 
   const fetchMaintenceTasks = async () => {
