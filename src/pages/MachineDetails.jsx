@@ -64,7 +64,8 @@ const MachineDetails = ({ machine, goBack }) => {
   // const SHEET_Id = "15SBKzTJKzaqhjPI5yt5tKkrd3tzNuhm_Q9-iDO8n0B0";
 
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5050/api/machine-details";
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+  console.log(API_BASE_URL)
 
 
   
