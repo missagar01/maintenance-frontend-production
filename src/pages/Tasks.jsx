@@ -37,7 +37,7 @@ const Tasks = () => {
 
 
   const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || "/api";
-
+  console.log(BACKEND_URL,"backend_url")
 
   // Fetch departments from Master sheet column B
   // Fetch departments from backend API
