@@ -97,6 +97,30 @@ const fetchMachinesByDepartment = async (department) => {
   }
 };
 
+const fetchDoerNames = async (department = "") => {
+  try {
+    let url = `${BACKEND_URL}/doer-name`;
+
+    // If department selected → add query param
+    if (department) {
+      url += `?department=${department}`;
+    }
+
+    const res = await fetch(url);
+    const result = await res.json();
+
+    if (result.success) {
+      setDoerName(result.data);
+    } else {
+      setDoerName([]);
+    }
+  } catch (error) {
+    console.error("Doer fetch error:", error);
+    setDoerName([]);
+  }
+};
+
+
 
 
   // Filter machines based on selected department
@@ -121,9 +145,13 @@ const handleDepartmentChange = async (department) => {
   setSelectedSerialNo("");
   setFilteredSerials([]);
 
-  // ✅ Fetch machines from backend for this department
+  // Machine dropdown update
   await fetchMachinesByDepartment(department);
+
+  // 🔥 NEW — Doer filter
+  await fetchDoerNames(department);
 };
+
 
 
   // Handle machine change
@@ -212,6 +240,7 @@ const fetchDropdownData = async () => {
 useEffect(() => {
   // fetchDepartments();   // <-- Fetch departments from correct route
   fetchDropdownData();  // <-- Fetch other dropdowns
+  fetchDoerNames();
 }, []);
 
   useEffect(() => {

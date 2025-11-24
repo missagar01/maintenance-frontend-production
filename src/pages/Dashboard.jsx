@@ -27,69 +27,79 @@ import {
 } from "lucide-react";
 import axios from "axios";
 
-
-
 const Dashboard = () => {
-
   // const SCRIPT_URL =
   //   "https://script.google.com/macros/s/AKfycbzudKkY63zbthWP_YcfyF-HnUOObG_XM9aS2JDCmTmcYLaY1OQq7ho6i085BXxu9N2E7Q/exec";
   // const SHEET_NAME = "FormResponses";
   // const SHEET_Id = "15SBKzTJKzaqhjPI5yt5tKkrd3tzNuhm_Q9-iDO8n0B0";
 
   const [sheetDate, setSheetData] = useState([]);
-const [maintenanceTasks, setMaintenanceTasks] = useState([]);
-const [repairTasks, setRepairTasks] = useState([]);
-const [totalMaintenanceTasksCompleted, setTotalMaintenanceTasksCompleted] = useState(0);
-const [totalMaintenanceTasksOverdue, setTotalMaintenanceTasksOverdue] = useState(0);
-const [totalRepairTasksCompleted, setTotalRepairTasksCompleted] = useState(0);
-const [totalRepairTasksOverdue, setTotalRepairTasksOverdue] = useState(0);
-const [repairCompletedTasks, setRepairCompletedTasks] = useState([]);
-const [maintenanceCompletedTasks, setMaintenanceCompletedTasks] = useState([]);
-const [maintenanceCostData, setMaintenanceCostData] = useState([]);
-const [departmentCostData, setDepartmentCostData] = useState([]);
-const [frequentRepairData, setFrequentRepairData] = useState([]);
-const [totalCost, setTotalCost] = useState(0);
+  const [maintenanceTasks, setMaintenanceTasks] = useState([]);
+  const [repairTasks, setRepairTasks] = useState([]);
+  const [totalMaintenanceTasksCompleted, setTotalMaintenanceTasksCompleted] =
+    useState(0);
+  const [totalMaintenanceTasksOverdue, setTotalMaintenanceTasksOverdue] =
+    useState(0);
+  const [totalRepairTasksCompleted, setTotalRepairTasksCompleted] = useState(0);
+  const [totalRepairTasksOverdue, setTotalRepairTasksOverdue] = useState(0);
+  const [repairCompletedTasks, setRepairCompletedTasks] = useState([]);
+  const [maintenanceCompletedTasks, setMaintenanceCompletedTasks] = useState(
+    []
+  );
+  const [maintenanceCostData, setMaintenanceCostData] = useState([]);
+  const [departmentCostData, setDepartmentCostData] = useState([]);
+  const [frequentRepairData, setFrequentRepairData] = useState([]);
+  const [totalCost, setTotalCost] = useState(0);
 
-// const BACKEND_URL = "http://localhost:5050/api/dashboard";
-// const BACKEND_URL = import.meta.env.VITE_API_BASE_URL;
-const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+  // const BACKEND_URL = "http://localhost:5050/api/dashboard";
+  // const BACKEND_URL = import.meta.env.VITE_API_BASE_URL;
+  const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
-
-useEffect(() => {
-  const fetchDashboardData = async () => {
-    try {
-    const [statsRes, machineCostRes, deptRes, freqRes] = await Promise.all([
-  axios.get(`${BACKEND_URL}/dashboard/stats`),
-  axios.get(`${BACKEND_URL}/dashboard/maintenance-costs`),
-  axios.get(`${BACKEND_URL}/dashboard/department-costs`),
-  axios.get(`${BACKEND_URL}/dashboard/frequencies`)
-]);
-
-
-
-      const stats = statsRes.data.data;
-
-      // ✅ Set summary metrics
-      setSheetData(new Array(stats.total_machines).fill(0));
-      setMaintenanceTasks(new Array(stats.total_tasks).fill(0));
-      setTotalMaintenanceTasksCompleted(stats.completed_tasks);
-      setTotalMaintenanceTasksOverdue(stats.overdue_tasks);
-      setTotalCost(stats.total_maintenance_cost);
-
-      // ✅ Chart data
-      setMaintenanceCostData(machineCostRes.data.data);
-      setDepartmentCostData(deptRes.data.data);
-      setFrequentRepairData(freqRes.data.data);
-
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
+  const formatIndianCurrency = (num) => {
+    if (num >= 10000000) {
+      // 1 Crore or more
+      return `₹${(num / 10000000).toFixed(2)}Cr`;
+    } else if (num >= 100000) {
+      // 1 Lakh or more
+      return `₹${(num / 100000).toFixed(2)}L`;
+    } else if (num >= 1000) {
+      // 1 Thousand or more
+      return `₹${(num / 1000).toFixed(2)}K`;
+    } else {
+      return `₹${num.toLocaleString()}`;
     }
   };
 
-  fetchDashboardData();
-}, []);
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const [statsRes, machineCostRes, deptRes, freqRes] = await Promise.all([
+          axios.get(`${BACKEND_URL}/dashboard/stats`),
+          axios.get(`${BACKEND_URL}/dashboard/maintenance-costs`),
+          axios.get(`${BACKEND_URL}/dashboard/department-costs`),
+          axios.get(`${BACKEND_URL}/dashboard/frequencies`),
+        ]);
 
+        const stats = statsRes.data.data;
 
+        // ✅ Set summary metrics
+        setSheetData(new Array(stats.total_machines).fill(0));
+        setMaintenanceTasks(new Array(stats.total_tasks).fill(0));
+        setTotalMaintenanceTasksCompleted(stats.completed_tasks);
+        setTotalMaintenanceTasksOverdue(stats.overdue_tasks);
+        setTotalCost(stats.total_maintenance_cost);
+
+        // ✅ Chart data
+        setMaintenanceCostData(machineCostRes.data.data);
+        setDepartmentCostData(deptRes.data.data);
+        setFrequentRepairData(freqRes.data.data);
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
 
   const formatSheetData = (sheetData) => {
     // Add null check to prevent the error
@@ -116,12 +126,14 @@ useEffect(() => {
     const maintenanceCostsByMachine = {};
 
     maintenanceCompletedTasks.forEach((task) => {
-      if (task["Serial No"] &&
+      if (
+        task["Serial No"] &&
         task["Maintenace Cost"] &&
         task["Task Start Date"] &&
         task["Actual Date"] &&
         task["Task Start Date"] !== "" &&
-        task["Actual Date"] !== "") {
+        task["Actual Date"] !== ""
+      ) {
         const machineName = task["Serial No"];
         const maintenanceCost = parseFloat(task["Maintenace Cost"]) || 0;
 
@@ -212,9 +224,6 @@ useEffect(() => {
     return sum + (task["Repair Cost"] || 0);
   }, 0);
 
-
-
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -252,9 +261,7 @@ useEffect(() => {
             <Calendar size={20} className="text-indigo-600" />
           </div>
           <div>
-            <p className="text-sm text-gray-500 font-medium">
-              Total Tasks
-            </p>
+            <p className="text-sm text-gray-500 font-medium">Total Tasks</p>
             <h3 className="text-2xl font-bold text-gray-800">
               {maintenanceTasks?.length}
             </h3>
@@ -325,19 +332,15 @@ useEffect(() => {
           </div>
           <div>
             <p className="text-sm text-gray-500 font-medium">Total Cost</p>
-            <h3 className="text-2xl font-bold text-gray-800">₹{totalCost.toLocaleString()}</h3>
-            {/* <p className="text-xs text-red-600 flex items-center mt-1">
-              <ArrowUpCircle size={14} className="mr-1 transform rotate-180" />
-              <span>-5% vs budget</span>
-            </p> */}
+            <h3 className="text-2xl font-bold text-gray-800">
+              {formatIndianCurrency(totalCost)}
+            </h3>
           </div>
         </div>
       </div>
 
       {/* Summary Stats for repair */}
       {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-        
-       
         <div className="bg-white rounded-xl shadow p-6 flex items-start">
           <div className="p-3 rounded-full bg-indigo-100 mr-4">
             <Calendar size={24} className="text-indigo-600" />

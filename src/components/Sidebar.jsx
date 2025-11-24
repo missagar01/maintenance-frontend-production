@@ -10,6 +10,7 @@ import {
   Key,
   Menu,
   X,
+  Settings,
 } from "lucide-react";
 import useAuthStore from "../store/authStore";
 
@@ -29,12 +30,16 @@ const Sidebar = () => {
     { path: "/assign-task", icon: ClipboardList, label: "Assign Task" },
     { path: "/tasks", icon: ClipboardList, label: "Tasks" },
     { path: "/reports", icon: BarChart3, label: "Reports" },
+    // Temporarily hidden - uncomment if needed:
+    // { path: "/settings", icon: Settings, label: "Settings" },
     { path: "/license", icon: Key, label: "License" },
-    { path: "/store-in", icon: BarChart3, label: "Store In" },
+    // { path: "/store-in", icon: BarChart3, label: "Store In" },
   ];
 
-  const allowedPages = user?.page
-    ? user.page.split(",").map((page) => page.trim())
+const allowedPages = user?.page_access
+    ? (Array.isArray(user.page_access)
+        ? user.page_access
+        : user.page_access.split(",").map((page) => page.trim()))
     : [];
 
   const filteredMenuItems = allMenuItems.filter((item) => {

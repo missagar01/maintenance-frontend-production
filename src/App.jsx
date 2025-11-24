@@ -14,6 +14,7 @@ import AssignTask from './pages/AssignTask';
 import ProtectedRoute from './components/ProtectedRoute';
 import useAuthStore from './store/authStore';
 import License from './pages/License';
+import Settings from './pages/Settings';
 
 function App() {
   return (
@@ -50,7 +51,12 @@ function App() {
               <AssignTask />
             </ProtectedRoute>
           } />
-          
+          <Route path="settings" element={
+            <ProtectedRoute allowedRoles={['admin', 'user']}>
+              <Settings />
+            </ProtectedRoute>
+          } />
+
           {/* Shared routes */}
           <Route path="tasks" element={<Tasks />} />
           <Route path="/tasks/:taskNo/:serialNo/:taskType" element={<TaskDetails />} />
