@@ -117,13 +117,21 @@ const fetchMachinesByDepartment = async (department) => {
   // Handle department change
 const handleDepartmentChange = async (department) => {
   setSelectedDepartment(department);
-  setSelectedMachine("");
-  setSelectedSerialNo("");
-  setFilteredSerials([]);
 
-  // ✅ Fetch machines from backend for this department
-  await fetchMachinesByDepartment(department);
+  const res = await fetch(`${BACKEND_URL}/dropdown?department=${department}`);
+  const result = await res.json();
+
+  if (result.success) {
+    setGivenByData(result.data.givenBy);
+    setDoerName(result.data.doerName);
+    setTaskStatusData(result.data.taskStatus);
+    setPriorityData(result.data.priority);
+  }
+
+  // Machines fetch
+  fetchMachinesByDepartment(department);
 };
+
 
 
   // Handle machine change
