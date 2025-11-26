@@ -31,7 +31,7 @@ const Sidebar = () => {
     { path: "/tasks", icon: ClipboardList, label: "Tasks" },
     { path: "/reports", icon: BarChart3, label: "Reports" },
     // Temporarily hidden - uncomment if needed:
-    // { path: "/settings", icon: Settings, label: "Settings" },
+    { path: "/settings", icon: Settings, label: "Settings" },
     { path: "/license", icon: Key, label: "License" },
     // { path: "/store-in", icon: BarChart3, label: "Store In" },
   ];
