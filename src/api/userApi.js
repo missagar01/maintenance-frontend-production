@@ -1,7 +1,9 @@
 import axios from "axios";
 
 // ⚠ Replace with your backend URL
-const API = "http://localhost:5050/api/users";
+// const API = "http://localhost:5050/api/users";
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API = `${API_BASE}/users`;
 
 // ➤ Get all users
 export const fetchUsers = async () => {

@@ -1,6 +1,9 @@
 import axios from "axios";
 
-const API = "http://localhost:5050/api/doer";
+// const API = "http://localhost:5050/api/doer";
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API = `${API_BASE}/doer`;
+
 
 // GET ALL DOERS
 export const fetchDoers = async () => {
