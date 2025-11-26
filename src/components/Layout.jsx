@@ -5,15 +5,18 @@ import Header from './Header';
 
 const Layout = () => {
   return (
-    <div className="flex h-screen bg-gray-50">
+    // <div className="flex h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar - controlled by the Sidebar component itself */}
       <Sidebar />
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* <div className="flex-1 flex flex-col overflow-hidden"> */}
+      <div className="flex-1 flex flex-col overflow-visible">
         <Header />
         
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:ml-0 ">
+        {/* <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:ml-0 "> */}
+        <main className="flex-1 bg-gray-50 p-4 md:ml-0">
           <div className="container mx-auto">
             <Outlet />
           </div>

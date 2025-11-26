@@ -28,6 +28,10 @@ const Machines = () => {
   const [loaderMasterSheetData, setLoaderMasterSheetData] = useState(false);
   const [showResultsCount, setShowResultsCount] = useState(false);
   const [resultsCount, setResultsCount] = useState(0);
+  const [page, setPage] = useState(1);
+const [loadingMore, setLoadingMore] = useState(false);
+const [hasMore, setHasMore] = useState(true);
+
 
   // const SCRIPT_URL =
   //   "https://script.google.com/macros/s/AKfycbzudKkY63zbthWP_YcfyF-HnUOObG_XM9aS2JDCmTmcYLaY1OQq7ho6i085BXxu9N2E7Q/exec";
@@ -40,14 +44,15 @@ const Machines = () => {
 const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 const API_URL = `${BACKEND_URL}/machines`;
 
-const fetchSheetData = async () => {
+const fetchSheetData = async (pageNumber = 1) => {
   try {
-    setLoaderSheetData(true);
-    const res = await fetch(API_URL);
+    if (pageNumber === 1) setLoaderSheetData(true);
+    else setLoadingMore(true);
+
+    const res = await fetch(`${API_URL}?page=${pageNumber}`);
     const result = await res.json();
 
     if (result.success) {
-      // ✅ Re-map backend data to UI-friendly format
       const formatted = result.data.map((item) => ({
         "Machine Name": item.machine_name,
         "Serial No": item.serial_no,
@@ -58,17 +63,28 @@ const fetchSheetData = async () => {
         "Purchase Price": item.purchase_price,
       }));
 
-      setSheetData(formatted);
-    } else {
-      console.error("Error fetching machines:", result.error);
+      if (pageNumber === 1) {
+        setSheetData(formatted);
+      } else {
+        setSheetData((prev) => [...prev, ...formatted]);
+      }
+
+      setHasMore(result.nextPage !== null);
+
     }
   } catch (err) {
     console.error("Fetch error:", err);
   } finally {
     setLoaderSheetData(false);
+    setLoadingMore(false);
   }
 };
 
+
+useEffect(() => {
+  console.log("Page Height:", document.documentElement.scrollHeight);
+  console.log("Window Height:", window.innerHeight);
+}, [sheetData]);
 
 
 const fetchMasterSheetData = async () => {
@@ -113,10 +129,15 @@ const fetchMasterSheetData = async () => {
 };
 
 
-  useEffect(() => {
-    fetchSheetData();
-    fetchMasterSheetData();
-  }, []);
+useEffect(() => {
+  fetchSheetData(1);
+
+  // small delay so scroll height is correct
+  setTimeout(() => setPage(1), 300);
+
+  fetchMasterSheetData();
+}, []);
+
 
 
 
@@ -128,6 +149,25 @@ const fetchMasterSheetData = async () => {
       setSortDirection("asc");
     }
   };
+  
+
+useEffect(() => {
+  const handleScroll = () => {
+    const scrollPosition = window.innerHeight + window.scrollY;
+    const bottom = document.documentElement.scrollHeight - 300;
+
+    if (scrollPosition >= bottom && !loadingMore && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchSheetData(nextPage);
+    }
+  };
+
+  window.addEventListener("scroll", handleScroll);
+  return () => window.removeEventListener("scroll", handleScroll);
+}, [loadingMore, hasMore, page]);
+
+
 
   const handleSearch = (e) => {
     const value = e.target.value;
@@ -189,7 +229,9 @@ const fetchMasterSheetData = async () => {
   }
 
   return (
-    <div className="space-y-6">
+    // <div className="space-y-6">
+    // <div className="space-y-6 min-h-[200vh]">
+    <div className="space-y-6 min-h-screen">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">Machines</h1>
         <Link
@@ -250,7 +292,8 @@ const fetchMasterSheetData = async () => {
 
       {/* Machine List Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* <div className="overflow-x-auto"> */}
+        <div className="overflow-x-auto overflow-y-visible">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr className="">
@@ -340,7 +383,8 @@ const fetchMasterSheetData = async () => {
             </thead>
 
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredMachines.map((machine, index) => (
+              {/* {filteredMachines.map((machine, index) => ( */}
+              {sheetData.map((machine, index) => (
                 <tr key={index} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
@@ -353,17 +397,21 @@ const fetchMasterSheetData = async () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     {machine["Department"]}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {new Date(
-                        machine["Warranty Expiration"]
-                      ).toLocaleDateString()}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      Purchase:{" "}
-                      {new Date(machine["Purchase Date"]).toLocaleDateString()}
-                    </div>
-                  </td>
+                 <td className="px-6 py-4 whitespace-nowrap">
+  <div className="text-sm text-gray-900">
+    {machine["Warranty Expiration"]
+      ? new Date(machine["Warranty Expiration"]).toLocaleDateString()
+      : ""}
+  </div>
+
+  <div className="text-xs text-gray-500">
+    Purchase:{" "}
+    {machine["Purchase Date"]
+      ? new Date(machine["Purchase Date"]).toLocaleDateString()
+      : ""}
+  </div>
+</td>
+
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {machine["Vendor"]}
                   </td>
