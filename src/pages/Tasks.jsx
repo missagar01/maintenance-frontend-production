@@ -37,7 +37,6 @@ const Tasks = () => {
 
 
   const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || "/api";
-  console.log(BACKEND_URL,"backend_url")
 
   // Fetch departments from Master sheet column B
   // Fetch departments from backend API
@@ -51,9 +50,7 @@ const Tasks = () => {
       if (departments && departments.length > 0) {
         const uniqueDepartments = [...new Set(departments)].sort();
         setDepartmentOptions(uniqueDepartments);
-        console.log('Fetched departments:', uniqueDepartments);
       } else {
-        console.warn('No department data found');
         setDepartmentOptions([]);
       }
     } catch (error) {
@@ -88,9 +85,6 @@ useEffect(() => {
 );
 
       const responseData = pendingTasksResponse.data;
-
-      console.log('Full backend response:', responseData);
-
       // Handle different response formats
       let pendingTasks = [];
       
@@ -107,9 +101,6 @@ useEffect(() => {
         // If it's a single task object, wrap it in an array
         pendingTasks = [responseData];
       }
-
-      console.log('Processed pending tasks:', pendingTasks);
-
       if (pendingTasks && pendingTasks.length > 0) {
         // Transform backend data to match frontend format
         const formattedTasks = pendingTasks.map(task => ({
@@ -131,7 +122,6 @@ useEffect(() => {
         setMaintenanceTasks(formattedTasks);
         setRepairTasks([]);
       } else {
-        console.warn('No pending tasks received from backend');
         setMaintenanceTasks([]);
         setRepairTasks([]);
       }
@@ -148,11 +138,8 @@ useEffect(() => {
 }, []);
 
   const formatSheetData = (sheetData) => {
-    console.log('Processing sheet data:', sheetData);
-
     // Add safety checks
     if (!sheetData || !sheetData.cols || !sheetData.rows) {
-      console.warn('Invalid sheet data structure:', sheetData);
       return [];
     }
 
@@ -160,7 +147,6 @@ useEffect(() => {
     const rows = sheetData.rows;
 
     if (!columns || columns.length === 0) {
-      console.warn('No columns found in sheet data');
       return [];
     }
 
@@ -212,7 +198,6 @@ useEffect(() => {
 
   const getFirstPendingOrLatestCompletedPerMachineAndSerial = (tasks) => {
     if (!tasks || !Array.isArray(tasks)) {
-      console.warn('Invalid tasks array provided to processing function');
       return [];
     }
 

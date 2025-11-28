@@ -49,16 +49,10 @@ function AssignTask() {
   const [enableReminder, setEnableReminder] = useState(false);
   const [requireAttachment, setRequireAttachment] = useState(false);
 
-  // const SCRIPT_URL =
-  //   "https://script.google.com/macros/s/AKfycbzudKkY63zbthWP_YcfyF-HnUOObG_XM9aS2JDCmTmcYLaY1OQq7ho6i085BXxu9N2E7Q/exec";
-  // const SHEET_Id = "15SBKzTJKzaqhjPI5yt5tKkrd3tzNuhm_Q9-iDO8n0B0";
-  // const FOLDER_ID = "1ZOuHUXUjONnHb4TBWqztjQcI5Pjvy_n0";
-
-  // const REPAIR_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwuV7jpPBbsRCe_6Clke9jfkk32GStqyzaCve0jK1qlPcyfBNW3NG-GB7dE12UiZH7E/exec";
-  // const REPAIR_SHEET_ID = "1-j3ydNhMDwa-SfvejOH15ow7ZZ10I1zwdV4acAirHe4";
-
-
   const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+  const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL || "";
+  const REPAIR_SCRIPT_URL = import.meta.env.VITE_REPAIR_SCRIPT_URL || "";
+  const SHEET_Id = import.meta.env.VITE_SHEET_ID || "";
 
   // Fetch departments from FormResponses sheet column J
 const fetchDepartments = async () => {
@@ -169,26 +163,45 @@ const handleMachineChange = async (machineName) => {
   if (!machineName) return;
 
   try {
-    const res = await fetch(
-      `${BACKEND_URL}/form-responses?department=${selectedDepartment}&machine_name=${machineName}`
-    );
+    // New API: get full machine list and filter locally by machine/department
+    const res = await fetch(`${BACKEND_URL}/machine-details`);
     const result = await res.json();
 
-    if (result.success && result.data && result.data.length > 0) {
-      const serialNumbers = result.data
-        .map((m) => m.serial_no)
-        .filter(Boolean);
+    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+      const matches = result.data.filter(
+        (m) =>
+          m.machine_name === machineName &&
+          (!selectedDepartment || m.department === selectedDepartment)
+      );
 
-      setFilteredSerials(serialNumbers); // ✅ fill dropdown list
-      setSelectedSerialNo(serialNumbers[0]); // optional: auto-select first
-      toast.success(`✅ Serial found: ${serialNumbers.join(", ")}`);
+      const tagNumbers =
+        matches
+          .map((m) => m.tag_no)
+          .filter(Boolean) || [];
+
+      // Fallback to serial_no only if no tag_no exists
+      const serialNumbersFallback =
+        tagNumbers.length > 0
+          ? []
+          : matches.map((m) => m.serial_no).filter(Boolean);
+
+      const finalList = tagNumbers.length > 0 ? tagNumbers : serialNumbersFallback;
+
+      if (finalList.length > 0) {
+        setFilteredSerials(finalList); // holds tag numbers now
+        setSelectedSerialNo(finalList[0]); // optional: auto-select first
+        toast.success(`✅ Tag found: ${finalList.join(", ")}`);
+      } else {
+        setFilteredSerials([]); // clear old ones
+        toast.error("⚠️ No tag found for this machine");
+      }
     } else {
-      setFilteredSerials([]); // clear old ones
-      toast.error("⚠️ No serial found for this machine");
+      setFilteredSerials([]);
+      toast.error("⚠️ No machine details found");
     }
   } catch (error) {
-    console.error("Serial fetch error:", error);
-    toast.error("❌ Failed to fetch serial number");
+    console.error("Tag fetch error:", error);
+    toast.error("❌ Failed to fetch tag number");
   }
 };
 
@@ -244,6 +257,9 @@ useEffect(() => {
 
 
   const fetchAllTasks = async () => {
+    if (!SCRIPT_URL || !SHEET_Id) {
+      return; // missing config; skip remote fetch
+    }
     try {
       const SHEET_NAME_TASK = selectedTaskType === "Repair" ? "Repair System" : "Maitenance Task Assign";
       const res = await fetch(
@@ -271,9 +287,9 @@ useEffect(() => {
     selectedTaskType === "Repair" ? setEndDate(endTaskDate) : fetchWorkingDaysCalendar();
   }, [selectedTaskType, endTaskDate]);
 
-  useEffect(() => {
-    fetchAllTasks();
-  }, [selectedTaskType]);
+useEffect(() => {
+  fetchAllTasks();
+}, [selectedTaskType]);
 
 // Machine list and department data now come from backend
 const fetchSheetData = async () => {
@@ -305,46 +321,6 @@ const fetchWorkingDaysCalendar = async () => {
   }
 };
 
-
-
-  // const fetchMasterSheetData = async () => {
-  //   const SHEET_NAME = "Master";
-  //   try {
-  //     setLoaderMasterSheetData(true);
-  //     const res = await fetch(
-  //       `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=${SHEET_NAME}`
-  //     );
-  //     const result = await res.json();
-
-  //     if (result.success && result.table) {
-  //       const headers = result.table.cols.map((col) => col.label);
-  //       const rows = result.table.rows;
-
-  //       const formattedRows = rows.map((rowObj) => {
-  //         const row = rowObj.c;
-  //         const rowData = {};
-  //         row.forEach((cell, i) => {
-  //           rowData[headers[i]] = cell.v;
-  //         });
-  //         return rowData;
-  //       });
-  //       const DoerNameData = formattedRows.map((item) => item["Doer Name"]);
-  //       setDoerName(DoerNameData);
-  //       const giveBy = formattedRows.map((item) => item["Given By"]);
-  //       setGivenByData(giveBy);
-  //       const taskStatus = formattedRows.map((item) => item["Task Status"]);
-  //       setTaskStatusData(taskStatus);
-  //       const priority = formattedRows.map((item) => item["Priority"]);
-  //       setPriorityData(priority);
-  //     } else {
-  //       console.error("Server error:", result.message || result.error);
-  //     }
-  //   } catch (err) {
-  //     console.error("Fetch error:", err);
-  //   } finally {
-  //     setLoaderMasterSheetData(false);
-  //   }
-  // };
 
 useEffect(() => {
   fetchSheetData();          // still loads machine list etc.
@@ -451,45 +427,7 @@ useEffect(() => {
     return newDate;
   };
 
-  // const fetchWorkingDays = async () => {
-  //   try {
-  //     const SHEET_NAME = "Working Day Calendar";
-
-  //     const response = await fetch(
-  //       `${SCRIPT_URL}?sheetId=${SHEET_Id}&sheet=${SHEET_NAME}`
-  //     );
-  //     if (!response.ok) {
-  //       throw new Error(`Failed to fetch working days: ${response.status}`);
-  //     }
-
-  //     const text = await response.text();
-  //     const jsonStart = text.indexOf("{");
-  //     const jsonEnd = text.lastIndexOf("}");
-  //     const jsonString = text.substring(jsonStart, jsonEnd + 1);
-  //     const data = JSON.parse(jsonString);
-
-  //     if (!data.table || !data.table.rows) {
-  //       console.log("No working day data found");
-  //       return [];
-  //     }
-
-  //     const workingDays = [];
-  //     data.table.rows.forEach((row) => {
-  //       if (row.c && row.c[0] && row.c[0].f) {
-  //         let dateValue = row.c[0].f;
-  //         if (typeof dateValue === "string" && dateValue.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-  //           workingDays.push(dateValue);
-  //         }
-  //       }
-  //     });
-
-  //     return workingDays;
-  //   } catch (error) {
-  //     console.error("Error fetching working days:", error);
-  //     return [];
-  //   }
-  // };
-
+ 
   const generateTasks = async () => {
     if (!startDate || !endDate || !startTime || (selectedTaskType === "Maintenance" ? !frequency : !endTaskDate)) {
       toast.error("Please fill in all required fields including date range, time and frequency");
@@ -591,6 +529,9 @@ const workingDays = workingDaysData.map(
   };
 
   const uploadImageToDrive = async (file, taskNo) => {
+    if (!file || (!SCRIPT_URL && !REPAIR_SCRIPT_URL)) {
+      return ""; // no upload target configured
+    }
     const reader = new FileReader();
 
     return new Promise((resolve, reject) => {
@@ -637,293 +578,7 @@ const workingDays = workingDaysData.map(
     });
   };
 
-  // const handleSubmitForm = async (e) => {
-  //   e.preventDefault();
-
-  //   try {
-  //     setLoaderSubmit(true);
-
-  //     const scriptUrl = selectedTaskType === "Repair" ? REPAIR_SCRIPT_URL : SCRIPT_URL;
-  //     const sheetId = selectedTaskType === "Repair" ? REPAIR_SHEET_ID : SHEET_Id;
-  //     const sheetName = selectedTaskType === "Repair" ? "Repair System" : "Maitenance Task Assign";
-
-  //     const payload = {
-  //       action: "insert1",
-  //       sheetName: sheetName,
-  //       sheetId: sheetId
-  //     };
-
-  //     if (selectedTaskType === "Repair") {
-  //       let imageUrl = "";
-  //       if (imageFile) {
-  //         const uniqueId = Date.now();
-  //         imageUrl = await uploadImageToDrive(imageFile, `repair_${uniqueId}`);
-  //       }
-
-  //       Object.assign(payload, {
-  //         "Time Stemp": new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
-  //         "Serial No": selectedSerialNo,
-  //         "Machine Name": selectedMachine,
-  //         "Machine Part Name": partName,
-  //         "Given By": selectedGivenBy,
-  //         "Doer Name": selectedDoerName,
-  //         "Problem With Machine": description,
-  //         "Enable Reminders": enableReminder ? "Yes" : "No",
-  //         "Require Attachment": requireAttachment ? "Yes" : "No",
-  //         "Task Start Date": `${startDate} ${startTime}:00`,
-  //         "Task Ending Date": `${endTaskDate} ${endTime}:00`,
-  //         "Priority": selectedPriority,
-  //         "Department": selectedDepartment,
-  //         "Location": temperature,
-  //         "Image Link": imageUrl
-  //       });
-  //     } else {
-  //       if (generatedTasks.length === 0) {
-  //         toast.error("❌ No generated tasks to assign. Please preview first.");
-  //         return;
-  //       }
-
-  //       const maintTasks = taskList.filter(task =>
-  //         task["Task No"] &&
-  //         typeof task["Task No"] === 'string' &&
-  //         task["Task No"].startsWith("TM-")
-  //       );
-
-  //       let lastTaskNo = 0;
-  //       if (maintTasks.length > 0) {
-  //         const taskNumbers = maintTasks.map(task => {
-  //           const numPart = task["Task No"].split("TM-")[1];
-  //           return parseInt(numPart) || 0;
-  //         });
-  //         lastTaskNo = Math.max(...taskNumbers);
-  //       }
-
-  //       payload.batchInsert = "true";
-  //       payload.rowData = JSON.stringify(
-  //         generatedTasks.map((task, idx) => ({
-  //           "Time Stemp": new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
-  //           "Task No": `TM-${String(lastTaskNo + idx + 1).padStart(3, "0")}`,
-  //           "Serial No": selectedSerialNo,
-  //           "Machine Name": selectedMachine,
-  //           "Given By": selectedGivenBy,
-  //           "Doer Name": selectedDoerName,
-  //           "Task Type": selectedTaskType,
-  //           "Machine Area": machineArea,
-  //           "Part Name": partName,
-  //           "Need Sound Test": needSoundTask,
-  //           "Temperature": temperature,
-  //           "Enable Reminders": enableReminder ? "Yes" : "No",
-  //           "Require Attachment": requireAttachment ? "Yes" : "No",
-  //           "Task Start Date": `${task.dueDate.split(" ")[0]} ${startTime}:00`,
-  //           "Frequency": frequency,
-  //           "Description": description,
-  //           "Priority": selectedPriority,
-  //         }))
-  //       );
-  //     }
-
-  //     const response = await fetch(scriptUrl, {
-  //       method: "POST",
-  //       headers: {
-  //         "Content-Type": "application/x-www-form-urlencoded",
-  //       },
-  //       body: new URLSearchParams(payload).toString(),
-  //     });
-
-  //     const result = await response.json();
-  //     console.log("Server response:", result);
-
-  //     if (result.success) {
-  //       toast.success("✅ Task assigned successfully!");
-
-  //       setSelectedSerialNo("");
-  //       setSelectedMachine("");
-  //       setSelectedGivenBy("");
-  //       setSelectedDoerName("");
-  //       setSelectedTaskType("Select Task Type");
-  //       setStartDate("");
-  //       setEndDate("");
-  //       setEndTaskDate("");
-  //       setFrequency("");
-  //       setWorkDescription("");
-  //       setSelectedPriority("");
-  //       setShowTaskPreview(false);
-  //       setStartTime("");
-  //       setEndTime("");
-  //       setEnableReminder(false);
-  //       setRequireAttachment(false);
-  //       setMachineArea("");
-  //       setPartName("");
-  //       setNeedSoundTask("");
-  //       setTemperature("");
-  //       setImageFile(null);
-  //       setGeneratedTasks([]);
-  //       setSelectedDepartment("");
-  //     } else {
-  //       throw new Error(result.error || "Unknown error occurred");
-  //     }
-  //   } catch (error) {
-  //     console.error("❌ Submission failed:", error);
-  //     toast.error(`❌ Failed to assign task: ${error.message}`);
-  //   } finally {
-  //     setLoaderSubmit(false);
-  //   }
-  // };
-
-
-//   const handleSubmitForm = async (e) => {
-//   e.preventDefault();
-
-//   try {
-//     setLoaderSubmit(true);
-
-//     // 🧠 Backend API endpoint (change to your deployed URL if needed)
-//     // const API_URL = "http://18.60.212.185:5050/api/maintenance-tasks";
-//     const API_URL = `${BACKEND_URL}/maintenance-tasks`;
-
-//     // ✅ MAINTENANCE type submission
-//     if (selectedTaskType === "Maintenance") {
-//       if (generatedTasks.length === 0) {
-//         toast.error("❌ No generated tasks to assign. Please preview first.");
-//         return;
-//       }
-
-//       // Generate Task No dynamically
-//       const maintTasks = taskList.filter(
-//         (task) =>
-//           task["Task No"] &&
-//           typeof task["Task No"] === "string" &&
-//           task["Task No"].startsWith("TM-")
-//       );
-
-//       let lastTaskNo = 0;
-//       if (maintTasks.length > 0) {
-//         const taskNumbers = maintTasks.map((task) => {
-//           const numPart = task["Task No"].split("TM-")[1];
-//           return parseInt(numPart) || 0;
-//         });
-//         lastTaskNo = Math.max(...taskNumbers);
-//       }
-
-//       // ✅ Loop over generatedTasks and POST each one
-//       for (let i = 0; i < generatedTasks.length; i++) {
-//         const task = generatedTasks[i];
-//         const payload = {
-//           task_no: `TM-${String(lastTaskNo + i + 1).padStart(3, "0")}`,
-//           serial_no: selectedSerialNo,
-//           machine_name: selectedMachine,
-//           given_by: selectedGivenBy,
-//           doer_name: selectedDoerName,
-//           task_type: selectedTaskType,
-//           machine_area: machineArea,
-//           part_name: partName,
-//           need_sound_test: needSoundTask,
-//           temperature: temperature,
-//           enable_reminders: enableReminder ? "Yes" : "No",
-//           require_attachment: requireAttachment ? "Yes" : "No",
-//           task_start_date: `${task.dueDate.split(" ")[0]} ${startTime}:00`,
-//           frequency: frequency,
-//           description: description,
-//           priority: selectedPriority,
-//           department: selectedDepartment,
-//         };
-
-//         // 🟢 Send to backend
-//         const res = await fetch(API_URL, {
-//           method: "POST",
-//           headers: {
-//             "Content-Type": "application/json",
-//           },
-//           body: JSON.stringify(payload),
-//         });
-
-//         const result = await res.json();
-//         if (!result.success) {
-//           throw new Error(result.error || "Insert failed for a task");
-//         }
-//       }
-
-//       toast.success(`✅ ${generatedTasks.length} Maintenance Tasks assigned successfully!`);
-//     }
-
-//     // ✅ REPAIR type submission
-//     else if (selectedTaskType === "Repair") {
-//       // const REPAIR_API_URL = "http://18.60.212.185:5050/api/repair-tasks"; // optional route if you make one
-//       const REPAIR_API_URL = `${BACKEND_URL}/repair-tasks`;
-
-//       const payload = {
-//         task_no: `RP-${Date.now()}`,
-//         serial_no: selectedSerialNo,
-//         machine_name: selectedMachine,
-//         given_by: selectedGivenBy,
-//         doer_name: selectedDoerName,
-//         task_type: selectedTaskType,
-//         machine_area: machineArea,
-//         part_name: partName,
-//         need_sound_test: needSoundTask,
-//         temperature: temperature,
-//         enable_reminders: enableReminder ? "Yes" : "No",
-//         require_attachment: requireAttachment ? "Yes" : "No",
-//         task_start_date: `${startDate} ${startTime}:00`,
-//         frequency: "one-time",
-//         description: description,
-//         priority: selectedPriority,
-//         department: selectedDepartment,
-//       };
-
-//       const formData = new FormData();
-//       for (const [key, value] of Object.entries(payload)) {
-//         formData.append(key, value);
-//       }
-
-//       if (imageFile) {
-//         formData.append("task_image", imageFile);
-//       }
-
-//       const res = await fetch(REPAIR_API_URL, {
-//         method: "POST",
-//         body: formData,
-//       });
-
-//       const result = await res.json();
-//       if (!result.success) throw new Error(result.error || "Repair task insert failed");
-
-//       toast.success("✅ Repair Task assigned successfully!");
-//     }
-
-//     // ✅ Clear form after success
-//     setSelectedSerialNo("");
-//     setSelectedMachine("");
-//     setSelectedGivenBy("");
-//     setSelectedDoerName("");
-//     setSelectedTaskType("Select Task Type");
-//     setStartDate("");
-//     setEndDate("");
-//     setEndTaskDate("");
-//     setFrequency("");
-//     setWorkDescription("");
-//     setSelectedPriority("");
-//     setShowTaskPreview(false);
-//     setStartTime("");
-//     setEndTime("");
-//     setEnableReminder(false);
-//     setRequireAttachment(false);
-//     setMachineArea("");
-//     setPartName("");
-//     setNeedSoundTask("");
-//     setTemperature("");
-//     setImageFile(null);
-//     setGeneratedTasks([]);
-//     setSelectedDepartment("");
-
-//   } catch (error) {
-//     console.error("❌ Submission failed:", error);
-//     toast.error(`❌ Failed to assign task: ${error.message}`);
-//   } finally {
-//     setLoaderSubmit(false);
-//   }
-// };
-
+  
 const handleSubmitForm = async (e) => {
   e.preventDefault();
 
@@ -947,6 +602,7 @@ const handleSubmitForm = async (e) => {
         const payload = {
           // 🟢 No need for task_no — backend auto-generates
           serial_no: selectedSerialNo,
+          tag_no: selectedSerialNo,
           machine_name: selectedMachine,
           given_by: selectedGivenBy,
           doer_name: selectedDoerName,
@@ -988,6 +644,7 @@ const handleSubmitForm = async (e) => {
       const payload = {
         task_no: `RP-${Date.now()}`, // optional unique ID for repair
         serial_no: selectedSerialNo,
+        tag_no: selectedSerialNo,
         machine_name: selectedMachine,
         given_by: selectedGivenBy,
         doer_name: selectedDoerName,
@@ -1141,21 +798,21 @@ const handleSubmitForm = async (e) => {
                       </select>
                     </div>
 
-                    {/* Serial No Dropdown */}
+                    {/* Tag No Dropdown */}
                     {selectedMachine && !loaderSheetData && (
                       <div>
                         <label
                           htmlFor="serialNo"
                           className="block text-sm font-medium text-gray-700 mb-1"
                         >
-                          Serial Number
+                          Tag Number
                         </label>
                         <select
                           id="serialNo"
                           onChange={(e) => setSelectedSerialNo(e.target.value)}
                           className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
-                          <option value="">Select Serial No</option>
+                          <option value="">Select Tag No</option>
                           {filteredSerials.map((serial, idx) => (
                             <option key={idx} value={serial}>
                               {serial}
@@ -1618,18 +1275,18 @@ const handleSubmitForm = async (e) => {
                       </select>
                     </div>
 
-                    {/* Serial No Dropdown */}
+                    {/* Tag No Dropdown */}
                     {selectedMachine && !loaderSheetData && (
                       <div>
                         <label htmlFor="serialNo" className="block text-sm font-medium text-gray-700 mb-1">
-                          Serial Number
+                          Tag Number
                         </label>
                         <select
                           id="serialNo"
                           onChange={(e) => setSelectedSerialNo(e.target.value)}
                           className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
-                          <option value="">Select Serial No</option>
+                          <option value="">Select Tag No</option>
                           {filteredSerials.map((serial, idx) => (
                             <option key={idx} value={serial}>
                               {serial}

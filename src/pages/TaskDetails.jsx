@@ -55,7 +55,7 @@ const fetchPendingTasksFromBackend = async () => {
     );
 
     if (res.data.success) {
-      console.log("✅ Pending tasks from backend:", res.data.data);
+      // console.log("✅ Pending tasks from backend:", res.data.data);
       setPendingTasks(res.data.data || []);
     } else {
       console.error("❌ Backend error:", res.data.error);
@@ -80,7 +80,7 @@ const fetchCompletedTasksFromBackend = async () => {
     const res = await axios.get(`${BACKEND_URL}/task-details/completed/${encodedMachine}?serialNo=${encodedSerial}`);
 
     if (res.data.success) {
-      console.log("✅ Completed tasks:", res.data.data);
+      // console.log("✅ Completed tasks:", res.data.data);
       setCompletedTasks(res.data.data || []);
     } else {
       console.error("❌ Backend error:", res.data.error);
@@ -190,7 +190,7 @@ const fetchCompletedTasksFromBackend = async () => {
       );
       if (res.data.success) {
         const { machineName } = res.data.data;
-        console.log("✅ Machine Name fetched:", machineName);
+        // console.log("✅ Machine Name fetched:", machineName);
         setMachineName(machineName);
       }
     } catch (error) {
@@ -204,7 +204,7 @@ const fetchCompletedTasksFromBackend = async () => {
 
 useEffect(() => {
   if (!machineName) return; // wait until machine name fetched
-  console.log("🔁 Fetching tasks for:", machineName);
+  // console.log("🔁 Fetching tasks for:", machineName);
   fetchPendingTasksFromBackend();
   fetchCompletedTasksFromBackend();
 }, [machineName]);
