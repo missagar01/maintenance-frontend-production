@@ -76,7 +76,17 @@ useEffect(() => {
     try {
       // Fetch pending tasks from your backend
       // const pendingTasksResponse = await axios.get("http://18.60.212.185:5050/api/tasks/pending");
-      const pendingTasksResponse = await axios.get(`${BACKEND_URL}/tasks/pending`);
+      // const pendingTasksResponse = await axios.get(`${BACKEND_URL}/tasks/pending`);
+      const pendingTasksResponse = await axios.get(
+  `${BACKEND_URL}/tasks/pending`,
+  { 
+    headers: { 
+      "x-user": user?.name,
+      "x-role": user?.role   // ✅ VERY IMPORTANT
+    } 
+  }
+);
+
       const responseData = pendingTasksResponse.data;
 
       console.log('Full backend response:', responseData);
