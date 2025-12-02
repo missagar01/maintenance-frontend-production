@@ -48,6 +48,9 @@ function AssignTask() {
 
   const [enableReminder, setEnableReminder] = useState(false);
   const [requireAttachment, setRequireAttachment] = useState(false);
+  // Add these new state variables
+const [machineDepartment, setMachineDepartment] = useState("");
+const [doerDepartment, setDoerDepartment] = useState("");
 
   const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || "/api";
   const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL || "";
@@ -109,20 +112,26 @@ const fetchMachinesByDepartment = async (department) => {
   };
 
   // Handle department change
+// Handle department change for both Maintenance and Repair
 const handleDepartmentChange = async (department) => {
   setSelectedDepartment(department);
+  
+  try {
+    const res = await fetch(`${BACKEND_URL}/dropdown?department=${department}`);
+    const result = await res.json();
 
-  const res = await fetch(`${BACKEND_URL}/dropdown?department=${department}`);
-  const result = await res.json();
-
-  if (result.success) {
-    setGivenByData(result.data.givenBy);
-    setDoerName(result.data.doerName);
-    setTaskStatusData(result.data.taskStatus);
-    setPriorityData(result.data.priority);
+    if (result.success) {
+      setGivenByData(result.data.givenBy);
+      setTaskStatusData(result.data.taskStatus);
+      setPriorityData(result.data.priority);
+      // Doer names should come from doer department, not machine department
+    }
+  } catch (err) {
+    console.error("Department fetch error:", err);
+    toast.error("❌ Failed to fetch dropdown data");
   }
-
-  // Machines fetch
+  
+  // Fetch machines for this department
   fetchMachinesByDepartment(department);
 };
 
@@ -163,7 +172,6 @@ const handleMachineChange = async (machineName) => {
   if (!machineName) return;
 
   try {
-    // New API: get full machine list and filter locally by machine/department
     const res = await fetch(`${BACKEND_URL}/machine-details`);
     const result = await res.json();
 
@@ -171,7 +179,7 @@ const handleMachineChange = async (machineName) => {
       const matches = result.data.filter(
         (m) =>
           m.machine_name === machineName &&
-          (!selectedDepartment || m.department === selectedDepartment)
+          (!machineDepartment || m.department === machineDepartment)
       );
 
       const tagNumbers =
@@ -179,7 +187,6 @@ const handleMachineChange = async (machineName) => {
           .map((m) => m.tag_no)
           .filter(Boolean) || [];
 
-      // Fallback to serial_no only if no tag_no exists
       const serialNumbersFallback =
         tagNumbers.length > 0
           ? []
@@ -188,11 +195,11 @@ const handleMachineChange = async (machineName) => {
       const finalList = tagNumbers.length > 0 ? tagNumbers : serialNumbersFallback;
 
       if (finalList.length > 0) {
-        setFilteredSerials(finalList); // holds tag numbers now
-        setSelectedSerialNo(finalList[0]); // optional: auto-select first
+        setFilteredSerials(finalList);
+        setSelectedSerialNo(finalList[0]);
         toast.success(`✅ Tag found: ${finalList.join(", ")}`);
       } else {
-        setFilteredSerials([]); // clear old ones
+        setFilteredSerials([]);
         toast.error("⚠️ No tag found for this machine");
       }
     } else {
@@ -208,18 +215,42 @@ const handleMachineChange = async (machineName) => {
 
 
   // 🧠 Fetch dropdown data from backend API (Postgres)
+// Machine department change for Maintenance
+const handleMachineDepartmentChange = async (department) => {
+  setMachineDepartment(department);
+  fetchMachinesByDepartment(department);
+};
+
+// Doer department change for Maintenance
+const handleDoerDepartmentChange = async (department) => {
+  setDoerDepartment(department);
+  
+  try {
+    const res = await fetch(`${BACKEND_URL}/dropdown?department=${department}`);
+    const result = await res.json();
+
+    if (result.success) {
+      setDoerName(result.data.doerName);
+    }
+  } catch (err) {
+    console.error("Doer department fetch error:", err);
+    toast.error("❌ Failed to fetch doer data");
+  }
+};
+
+// Update fetchDropdownData to not pre-fill doer data
 const fetchDropdownData = async () => {
   try {
-    // const res = await fetch("http://18.60.212.185:5050/api/dropdown");
     const res = await fetch(`${BACKEND_URL}/dropdown`);
     const result = await res.json();
 
     if (result.success && result.data) {
       setDepartmentOptions(result.data.departments || []);
+      // These should come from machine department selection
       setGivenByData(result.data.givenBy || []);
-      setDoerName(result.data.doerName || []);
       setTaskStatusData(result.data.taskStatus || []);
-      setPriorityData(result.data.priority || []); // ✅ NEW LINE
+      setPriorityData(result.data.priority || []);
+      // Don't set doerName here - it should come from doer department
     } else {
       toast.error("Failed to load dropdown data");
     }
@@ -228,7 +259,6 @@ const fetchDropdownData = async () => {
     toast.error("❌ Failed to fetch dropdowns");
   }
 };
-
 
 useEffect(() => {
   // fetchDepartments();   // <-- Fetch departments from correct route
@@ -585,22 +615,19 @@ const handleSubmitForm = async (e) => {
   try {
     setLoaderSubmit(true);
 
-    // 🧠 Backend API endpoint (update if hosted elsewhere)
     const API_URL = `${BACKEND_URL}/maintenance-tasks`;
 
-    // ✅ MAINTENANCE task submission
     if (selectedTaskType === "Maintenance") {
+      // ✅ KEEP THIS EXACTLY AS IS - NO CHANGES
       if (generatedTasks.length === 0) {
         toast.error("❌ No generated tasks to assign. Please preview first.");
         return;
       }
 
-      // ✅ Loop over generated tasks and send each one
       for (let i = 0; i < generatedTasks.length; i++) {
         const task = generatedTasks[i];
 
         const payload = {
-          // 🟢 No need for task_no — backend auto-generates
           serial_no: selectedSerialNo,
           tag_no: selectedSerialNo,
           machine_name: selectedMachine,
@@ -617,7 +644,8 @@ const handleSubmitForm = async (e) => {
           frequency: frequency,
           description: description,
           priority: selectedPriority,
-          department: selectedDepartment,
+          machine_department: machineDepartment, // New field
+          doer_department: doerDepartment, // New field
         };
 
         const res = await fetch(API_URL, {
@@ -637,51 +665,86 @@ const handleSubmitForm = async (e) => {
       );
     }
 
-    // ✅ REPAIR task submission
-    else if (selectedTaskType === "Repair") {
-      const REPAIR_API_URL = `${BACKEND_URL}/repair-tasks`;
+    // ✅ REPAIR task submission - MODIFIED FOR REPAIR-SYSTEM DATABASE
+   // ✅ REPAIR task submission - MODIFIED FOR REPAIR-SYSTEM DATABASE
+else if (selectedTaskType === "Repair") {
+  const REPAIR_API_URL = `${BACKEND_URL}/repair-tasks`;
 
-      const payload = {
-        task_no: `RP-${Date.now()}`, // optional unique ID for repair
-        serial_no: selectedSerialNo,
-        tag_no: selectedSerialNo,
-        machine_name: selectedMachine,
-        given_by: selectedGivenBy,
-        doer_name: selectedDoerName,
-        task_type: selectedTaskType,
-        machine_area: machineArea,
-        part_name: partName,
-        need_sound_test: needSoundTask,
-        temperature: temperature,
-        enable_reminders: enableReminder ? "Yes" : "No",
-        require_attachment: requireAttachment ? "Yes" : "No",
-        task_start_date: `${startDate} ${startTime}:00`,
-        frequency: "one-time",
-        description: description,
-        priority: selectedPriority,
-        department: selectedDepartment,
-      };
+  // Format date to DD/MM/YYYY for PostgreSQL trigger
+  const formatDateToDMY = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
 
-      const formData = new FormData();
-      for (const [key, value] of Object.entries(payload)) {
-        formData.append(key, value);
-      }
+  // Create FormData for repair submission
+  const formData = new FormData();
+  
+  // Add only fields that exist in repair_system table
+  formData.append('serial_no', selectedSerialNo || '');
+  formData.append('machine_name', selectedMachine || '');
+  formData.append('machine_part_name', partName || '');
+  formData.append('given_by', selectedGivenBy || '');
+  formData.append('doer_name', selectedDoerName || '');
+  formData.append('problem_with_machine', description || '');
+  formData.append('priority', selectedPriority || 'Medium');
+  // Submit DOER department as department for repair
+  formData.append('department', doerDepartment || ''); // CHANGED: Use doerDepartment
+  formData.append('enable_reminders', enableReminder ? "Yes" : "No");
+  formData.append('require_attachment', requireAttachment ? "Yes" : "No");
+  
+  // Format dates properly for repair_system table
+  if (startDate) {
+    const formattedStartDate = `${formatDateToDMY(startDate)} ${startTime || '00:00'}:00`;
+    formData.append('task_start_date', formattedStartDate);
+  }
+  
+  if (endTaskDate) {
+    const formattedEndDate = `${formatDateToDMY(endTaskDate)} ${endTime || '00:00'}:00`;
+    formData.append('task_ending_date', formattedEndDate);
+  }
 
-      if (imageFile) formData.append("task_image", imageFile);
+  // Add image if exists
+  if (imageFile) {
+    formData.append('task_image', imageFile);
+  }
 
-      const res = await fetch(REPAIR_API_URL, {
-        method: "POST",
-        body: formData,
-      });
+  console.log("📤 Submitting to Repair DB...");
 
-      const result = await res.json();
-      if (!result.success)
-        throw new Error(result.error || "Repair task insert failed");
+  const res = await fetch(REPAIR_API_URL, {
+    method: "POST",
+    body: formData,
+  });
 
-      toast.success("✅ Repair Task assigned successfully!");
-    }
+  // First check if response is ok
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error("Server error response:", errorText);
+    throw new Error(`Server error: ${res.status} ${res.statusText}`);
+  }
 
-    // ✅ Clear form after success
+  // Try to parse as JSON
+  let result;
+  try {
+    result = await res.json();
+  } catch (jsonError) {
+    console.error("JSON parse error:", jsonError);
+    const responseText = await res.text();
+    console.error("Server response:", responseText);
+    throw new Error("Server returned invalid JSON");
+  }
+
+  if (!result.success) {
+    throw new Error(result.error || "Repair task insert failed");
+  }
+
+  toast.success(`✅ Repair Task ${result.data?.task_no} created successfully!`);
+}
+
+    // ✅ Clear form after success - KEEP THIS AS IS
     setSelectedSerialNo("");
     setSelectedMachine("");
     setSelectedGivenBy("");
@@ -739,805 +802,853 @@ const handleSubmitForm = async (e) => {
               </select>
             </div>
 
-            {selectedTaskType === "Maintenance" && (
-              <>
-                {/* Department Dropdown */}
-                <div>
-                  <label
-                    htmlFor="department"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Department
-                  </label>
-                  <select
-                    id="department"
-                    value={selectedDepartment}
-                    onChange={(e) => handleDepartmentChange(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select Department</option>
-                    {departmentOptions.map((dept, index) => (
-                      <option key={index} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+         {selectedTaskType === "Maintenance" && (
+  <>
+    {/* Machine Department Dropdown */}
+    <div>
+      <label
+        htmlFor="machineDepartment"
+        className="block text-sm font-medium text-gray-700 mb-1"
+      >
+        Machine Department
+      </label>
+      <select
+        id="machineDepartment"
+        value={machineDepartment}
+        onChange={(e) => handleMachineDepartmentChange(e.target.value)}
+        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+      >
+        <option value="">Select Machine Department</option>
+        {departmentOptions.map((dept, index) => (
+          <option key={index} value={dept}>
+            {dept}
+          </option>
+        ))}
+      </select>
+    </div>
 
-                <div className="block md:flex md:justify-between md:space-x-4">
-                  {/* Left Section */}
-                  <div className="w-full md:w-[45%] space-y-4 mb-4 md:mb-0">
-                    {/* Machine Name Dropdown */}
-                    <div>
-                      <label
-                        htmlFor="machineName"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Machine Name
-                      </label>
-                      <select
-                        id="machineName"
-                        value={selectedMachine}
-                        onChange={(e) => handleMachineChange(e.target.value)}
-                        className="w-full py-2 rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        disabled={!selectedDepartment}
-                      >
-                        <option value="">Select Machine</option>
-                        {loaderMasterSheetData ? (
-                          <option className="flex gap-5 items-center justify-center">
-                            <Loader2Icon className="animate-spin text-red-500" />
-                            <h1>Wait Please...</h1>
-                          </option>
-                        ) : (
-                          filteredMachines.map((machineName, index) => (
-                            <option key={index} value={machineName}>
-                              {machineName}
-                            </option>
-                          ))
-                        )}
-                      </select>
-                    </div>
+    {/* Doer Department Dropdown */}
+    <div className="mt-4">
+      <label
+        htmlFor="doerDepartment"
+        className="block text-sm font-medium text-gray-700 mb-1"
+      >
+        Doer Department
+      </label>
+      <select
+        id="doerDepartment"
+        value={doerDepartment}
+        onChange={(e) => handleDoerDepartmentChange(e.target.value)}
+        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+      >
+        <option value="">Select Doer Department</option>
+        {departmentOptions.map((dept, index) => (
+          <option key={index} value={dept}>
+            {dept}
+          </option>
+        ))}
+      </select>
+    </div>
 
-                    {/* Tag No Dropdown */}
-                    {selectedMachine && !loaderSheetData && (
-                      <div>
-                        <label
-                          htmlFor="serialNo"
-                          className="block text-sm font-medium text-gray-700 mb-1"
-                        >
-                          Tag Number
-                        </label>
-                        <select
-                          id="serialNo"
-                          onChange={(e) => setSelectedSerialNo(e.target.value)}
-                          className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="">Select Tag No</option>
-                          {filteredSerials.map((serial, idx) => (
-                            <option key={idx} value={serial}>
-                              {serial}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    {/* Given By */}
-                    <div>
-                      <label
-                        htmlFor="taskType"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Given By
-                      </label>
-                      <select
-                        id="taskType"
-                        onChange={(e) => setSelectedGivenBy(e.target.value)}
-                        className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Given By</option>
-                        {loaderMasterSheetData ? (
-                          <>
-                            <option className="flex gap-5 items-center justify-center">
-                              <Loader2Icon className="animate-spin text-red-500" />
-                              <h1>Wait Please...</h1>
-                            </option>
-                          </>
-                        ) : (
-                          giveByData.map(
-                            (item, index) =>
-                              item && (
-                                <option key={index} value={item}>
-                                  {item}
-                                </option>
-                              )
-                          )
-                        )}
-                      </select>
-                    </div>
-
-                    {/* Doer's Name */}
-                    <div>
-                      <label
-                        htmlFor="taskType"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Doer's Name
-                      </label>
-                      <select
-                        id="taskType"
-                        onChange={(e) => setSelectedDoerName(e.target.value)}
-                        className="py-2 rounded-md w-full border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Doer Name</option>
-                        {loaderMasterSheetData ? (
-                          <option className="flex gap-5 items-center justify-center">
-                            <Loader2Icon className="animate-spin text-red-500" />
-                            <h1>Wait Please...</h1>
-                          </option>
-                        ) : (
-                          doerName.map(
-                            (item, index) =>
-                              item && (
-                                <option key={index} value={item}>
-                                  {item}
-                                </option>
-                              )
-                          )
-                        )}
-                      </select>
-                    </div>
-
-                    {/* Task Temperature */}
-                    <div>
-                      <label
-                        htmlFor="temperature"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Temperature
-                      </label>
-                      <select
-                        id="temperature"
-                        onChange={(e) => setTemperature(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Temperature</option>
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Right Section */}
-                  <div className="w-full md:w-[45%] space-y-4">
-                    {/* Task Status */}
-                    <div>
-                      <label
-                        htmlFor="taskType"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Task Status
-                      </label>
-                      <select
-                        id="taskType"
-                        className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Task Status</option>
-                        {loaderMasterSheetData ? (
-                          <option className="flex gap-5 items-center justify-center">
-                            <Loader2Icon className="animate-spin text-red-500" />
-                            <h1>Wait Please...</h1>
-                          </option>
-                        ) : (
-                          taskStatusData.map(
-                            (item, index) =>
-                              item && (
-                                <option key={index} value={item}>
-                                  {item}
-                                </option>
-                              )
-                          )
-                        )}
-                      </select>
-                    </div>
-
-                    {/* Machine Area */}
-                    <div>
-                      <label
-                        htmlFor="description"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Machine Area
-                      </label>
-                      <input
-                        id="description"
-                        onChange={(e) => setMachineArea(e.target.value)}
-                        value={machineArea}
-                        rows={4}
-                        className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter task description..."
-                      />
-                    </div>
-
-                    {/* Part Name */}
-                    <div>
-                      <label
-                        htmlFor="description"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Part Name
-                      </label>
-                      <input
-                        id="description"
-                        onChange={(e) => setPartName(e.target.value)}
-                        value={partName}
-                        rows={4}
-                        className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter task description..."
-                      />
-                    </div>
-
-                    {/* Task Type */}
-                    <div>
-                      <label
-                        htmlFor="needSoundTest"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Need Sound Test
-                      </label>
-                      <select
-                        id="needSoundTest"
-                        onChange={(e) => setNeedSoundTask(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Need Sound Test</option>
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
-                      </select>
-                    </div>
-
-                    {/* Priority */}
-                    <div>
-                      <label
-                        htmlFor="priority"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Priority
-                      </label>
-                      <select
-                        id="priority"
-                        onChange={(e) => setSelectedPriority(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Priority</option>
-                        {loaderMasterSheetData ? (
-                          <option className="flex gap-5 items-center justify-center">
-                            <Loader2Icon className="animate-spin text-red-500" />
-                            <h1>Wait Please...</h1>
-                          </option>
-                        ) : (
-                          priorityData.map(
-                            (item, index) =>
-                              item && (
-                                <option key={index} value={item}>
-                                  {item}
-                                </option>
-                              )
-                          )
-                        )}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/*Work Description */}
-                <div className="mt-4">
-                  <label
-                    htmlFor="description"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Work Description
-                  </label>
-                  <textarea
-                    id="description"
-                    onChange={(e) => setWorkDescription(e.target.value)}
-                    value={description}
-                    rows={4}
-                    className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter task description..."
-                  />
-                </div>
-
-                {/* Start Date, Time, and Frequency */}
-                <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4 mt-4">
-                  <div className="w-full md:w-1/3">
-                    <label
-                      htmlFor="startDate"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Task Start Date
-                    </label>
-                    <input
-                      type="date"
-                      id="startDate"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                    />
-                  </div>
-
-                  {/* Task Time */}
-                  <div className="w-full md:w-1/3">
-                    <label
-                      htmlFor="startDate"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Task Time
-                    </label>
-                    <input
-                      type="time"
-                      id="startTime"
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                    />
-                  </div>
-
-                  {/* Frequency */}
-                  <div className="w-full md:w-1/3">
-                    <label
-                      htmlFor="frequency"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      Frequency
-                    </label>
-                    <select
-                      id="frequency"
-                      onChange={(e) => setFrequency(e.target.value)}
-                      className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      disabled={availableFrequencies.length === 0}
-                    >
-                      <option value="">Select Frequency</option>
-                      {availableFrequencies.map((freq, idx) => (
-                        <option key={idx} value={freq.toLowerCase()}>
-                          {freq}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Preview Generated */}
-                <button
-                  type="button"
-                  disabled={loaderWorkingDayData}
-                  onClick={generateTasks}
-                  className={`w-full flex items-center justify-center gap-2 mb-4 px-4 py-2 text-sm bg-blue-100 border border-blue-400 text-blue-700 rounded hover:bg-blue-200 mt-4 ${loaderWorkingDayData ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                >
-                  {loaderWorkingDayData && (
-                    <LoaderIcon className="animate-spin w-4 h-4" />
-                  )}
-                  Preview Generated Tasks
-                </button>
-
-                {showTaskPreview && (
-                  <div className="bg-blue-50 border border-blue-300 p-4 rounded-lg">
-                    <div className="text-blue-800 font-semibold mb-2">
-                      {generatedTasks.length} Tasks Generated (Will be stored in Checklist sheet)
-                    </div>
-                    <div className="max-h-[300px] overflow-y-auto space-y-3">
-                      {generatedTasks.slice(0, 10).map((task, idx) => (
-                        <div
-                          key={idx}
-                          className="bg-white rounded p-3 shadow-sm border border-blue-200"
-                        >
-                          <div className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded inline-block mb-1">
-                            Reminders
-                          </div>
-                          <div className="text-sm">{task.description}</div>
-                          <div className="text-xs text-gray-600">
-                            Due: {task.due} | Department: {task.department}
-                          </div>
-                        </div>
-                      ))}
-                      {generatedTasks.length > 10 && (
-                        <div className="text-xs text-blue-600 italic">
-                          ...and {generatedTasks.length - 10} more tasks
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Additional Info */}
-                <div className="w-full mt-6">
-                  <h1 className="text-[1.4rem] text-blue-700 mb-5">
-                    Additional Option
-                  </h1>
-                  <div className="space-y-5">
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <h1 className="text-[1.2rem] text-blue-600">
-                          Enable Reminder
-                        </h1>
-                        <h1 className="text-[1rem] text-blue-500">
-                          Send reminders before task due date
-                        </h1>
-                      </div>
-                      <div
-                        onClick={() => setEnableReminder((prev) => !prev)}
-                        className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors ${enableReminder ? "bg-blue-600" : "bg-gray-200"
-                          }`}
-                      >
-                        <div
-                          className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${enableReminder ? "translate-x-5" : "translate-x-0"
-                            }`}
-                        ></div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <h1 className="text-[1.2rem] text-blue-600">
-                          Require Attachment
-                        </h1>
-                        <h1 className="text-[1rem] text-blue-500">
-                          User must upload a file when completing task
-                        </h1>
-                      </div>
-                      <div
-                        onClick={() => setRequireAttachment((prev) => !prev)}
-                        className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors ${requireAttachment ? "bg-blue-600" : "bg-gray-200"
-                          }`}
-                      >
-                        <div
-                          className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${requireAttachment
-                            ? "translate-x-5"
-                            : "translate-x-0"
-                            }`}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* submit button */}
-                <div className="pt-4">
-                  <button
-                    type="submit"
-                    disabled={loaderSubmit}
-                    className={`w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${loaderSubmit ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                  >
-                    {loaderSubmit && (
-                      <LoaderIcon className="animate-spin w-4 h-4" />
-                    )}
-                    {loaderSubmit ? "Assigning..." : "Assign Task"}
-                  </button>
-                </div>
-              </>
+    <div className="block md:flex md:justify-between md:space-x-4">
+      {/* Left Section */}
+      <div className="w-full md:w-[45%] space-y-4 mb-4 md:mb-0">
+        {/* Machine Name Dropdown - Only enabled when machine department is selected */}
+        <div>
+          <label
+            htmlFor="machineName"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Machine Name
+          </label>
+          <select
+            id="machineName"
+            value={selectedMachine}
+            onChange={(e) => handleMachineChange(e.target.value)}
+            className="w-full py-2 rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            disabled={!machineDepartment}
+          >
+            <option value="">Select Machine</option>
+            {loaderMasterSheetData ? (
+              <option className="flex gap-5 items-center justify-center">
+                <Loader2Icon className="animate-spin text-red-500" />
+                <h1>Wait Please...</h1>
+              </option>
+            ) : (
+              filteredMachines.map((machineName, index) => (
+                <option key={index} value={machineName}>
+                  {machineName}
+                </option>
+              ))
             )}
+          </select>
+        </div>
+
+        {/* Tag No Dropdown */}
+        {selectedMachine && !loaderSheetData && (
+          <div>
+            <label
+              htmlFor="serialNo"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Tag Number
+            </label>
+            <select
+              id="serialNo"
+              onChange={(e) => setSelectedSerialNo(e.target.value)}
+              className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Select Tag No</option>
+              {filteredSerials.map((serial, idx) => (
+                <option key={idx} value={serial}>
+                  {serial}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Given By */}
+        <div>
+          <label
+            htmlFor="taskType"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Given By
+          </label>
+          <select
+            id="taskType"
+            onChange={(e) => setSelectedGivenBy(e.target.value)}
+            className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Select Given By</option>
+            {loaderMasterSheetData ? (
+              <>
+                <option className="flex gap-5 items-center justify-center">
+                  <Loader2Icon className="animate-spin text-red-500" />
+                  <h1>Wait Please...</h1>
+                </option>
+              </>
+            ) : (
+              giveByData.map(
+                (item, index) =>
+                  item && (
+                    <option key={index} value={item}>
+                      {item}
+                    </option>
+                  )
+              )
+            )}
+          </select>
+        </div>
+
+        {/* Doer's Name - Only enabled when doer department is selected */}
+        <div>
+          <label
+            htmlFor="doerName"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Doer's Name
+          </label>
+          <select
+            id="doerName"
+            onChange={(e) => setSelectedDoerName(e.target.value)}
+            className="py-2 rounded-md w-full border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            disabled={!doerDepartment}
+          >
+            <option value="">Select Doer Name</option>
+            {loaderMasterSheetData ? (
+              <option className="flex gap-5 items-center justify-center">
+                <Loader2Icon className="animate-spin text-red-500" />
+                <h1>Wait Please...</h1>
+              </option>
+            ) : (
+              doerName.map(
+                (item, index) =>
+                  item && (
+                    <option key={index} value={item}>
+                      {item}
+                    </option>
+                  )
+              )
+            )}
+          </select>
+        </div>
+
+        {/* Task Temperature */}
+        <div>
+          <label
+            htmlFor="temperature"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Temperature
+          </label>
+          <select
+            id="temperature"
+            onChange={(e) => setTemperature(e.target.value)}
+            className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Select Temperature</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Right Section - REST OF YOUR CODE REMAINS THE SAME */}
+      <div className="w-full md:w-[45%] space-y-4">
+        {/* Task Status */}
+        <div>
+          <label
+            htmlFor="taskType"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Task Status
+          </label>
+          <select
+            id="taskType"
+            className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Select Task Status</option>
+            {loaderMasterSheetData ? (
+              <option className="flex gap-5 items-center justify-center">
+                <Loader2Icon className="animate-spin text-red-500" />
+                <h1>Wait Please...</h1>
+              </option>
+            ) : (
+              taskStatusData.map(
+                (item, index) =>
+                  item && (
+                    <option key={index} value={item}>
+                      {item}
+                    </option>
+                  )
+              )
+            )}
+          </select>
+        </div>
+
+        {/* Machine Area */}
+        <div>
+          <label
+            htmlFor="description"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Machine Area
+          </label>
+          <input
+            id="description"
+            onChange={(e) => setMachineArea(e.target.value)}
+            value={machineArea}
+            rows={4}
+            className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Enter task description..."
+          />
+        </div>
+
+        {/* Part Name */}
+        <div>
+          <label
+            htmlFor="description"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Part Name
+          </label>
+          <input
+            id="description"
+            onChange={(e) => setPartName(e.target.value)}
+            value={partName}
+            rows={4}
+            className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Enter task description..."
+          />
+        </div>
+
+        {/* Task Type */}
+        <div>
+          <label
+            htmlFor="needSoundTest"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Need Sound Test
+          </label>
+          <select
+            id="needSoundTest"
+            onChange={(e) => setNeedSoundTask(e.target.value)}
+            className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Select Need Sound Test</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+
+        {/* Priority */}
+        <div>
+          <label
+            htmlFor="priority"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Priority
+          </label>
+          <select
+            id="priority"
+            onChange={(e) => setSelectedPriority(e.target.value)}
+            className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Select Priority</option>
+            {loaderMasterSheetData ? (
+              <option className="flex gap-5 items-center justify-center">
+                <Loader2Icon className="animate-spin text-red-500" />
+                <h1>Wait Please...</h1>
+              </option>
+            ) : (
+              priorityData.map(
+                (item, index) =>
+                  item && (
+                    <option key={index} value={item}>
+                      {item}
+                    </option>
+                  )
+              )
+            )}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    {/* Work Description - REST OF YOUR CODE REMAINS THE SAME */}
+    <div className="mt-4">
+      <label
+        htmlFor="description"
+        className="block text-sm font-medium text-gray-700 mb-1"
+      >
+        Work Description
+      </label>
+      <textarea
+        id="description"
+        onChange={(e) => setWorkDescription(e.target.value)}
+        value={description}
+        rows={4}
+        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        placeholder="Enter task description..."
+      />
+    </div>
+
+    {/* Start Date, Time, and Frequency */}
+    <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4 mt-4">
+      <div className="w-full md:w-1/3">
+        <label
+          htmlFor="startDate"
+          className="block text-sm font-medium text-gray-700"
+        >
+          Task Start Date
+        </label>
+        <input
+          type="date"
+          id="startDate"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+        />
+      </div>
+
+      {/* Task Time */}
+      <div className="w-full md:w-1/3">
+        <label
+          htmlFor="startDate"
+          className="block text-sm font-medium text-gray-700"
+        >
+          Task Time
+        </label>
+        <input
+          type="time"
+          id="startTime"
+          value={startTime}
+          onChange={(e) => setStartTime(e.target.value)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+        />
+      </div>
+
+      {/* Frequency */}
+      <div className="w-full md:w-1/3">
+        <label
+          htmlFor="frequency"
+          className="block text-sm font-medium text-gray-700 mb-1"
+        >
+          Frequency
+        </label>
+        <select
+          id="frequency"
+          onChange={(e) => setFrequency(e.target.value)}
+          className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          disabled={availableFrequencies.length === 0}
+        >
+          <option value="">Select Frequency</option>
+          {availableFrequencies.map((freq, idx) => (
+            <option key={idx} value={freq.toLowerCase()}>
+              {freq}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+
+    {/* Preview Generated */}
+    <button
+      type="button"
+      disabled={loaderWorkingDayData}
+      onClick={generateTasks}
+      className={`w-full flex items-center justify-center gap-2 mb-4 px-4 py-2 text-sm bg-blue-100 border border-blue-400 text-blue-700 rounded hover:bg-blue-200 mt-4 ${loaderWorkingDayData ? "opacity-50 cursor-not-allowed" : ""
+        }`}
+    >
+      {loaderWorkingDayData && (
+        <LoaderIcon className="animate-spin w-4 h-4" />
+      )}
+      Preview Generated Tasks
+    </button>
+
+    {showTaskPreview && (
+      <div className="bg-blue-50 border border-blue-300 p-4 rounded-lg">
+        <div className="text-blue-800 font-semibold mb-2">
+          {generatedTasks.length} Tasks Generated (Will be stored in Checklist sheet)
+        </div>
+        <div className="max-h-[300px] overflow-y-auto space-y-3">
+          {generatedTasks.slice(0, 10).map((task, idx) => (
+            <div
+              key={idx}
+              className="bg-white rounded p-3 shadow-sm border border-blue-200"
+            >
+              <div className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded inline-block mb-1">
+                Reminders
+              </div>
+              <div className="text-sm">{task.description}</div>
+              <div className="text-xs text-gray-600">
+                Due: {task.due} | Department: {task.department}
+              </div>
+            </div>
+          ))}
+          {generatedTasks.length > 10 && (
+            <div className="text-xs text-blue-600 italic">
+              ...and {generatedTasks.length - 10} more tasks
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* Additional Info */}
+    <div className="w-full mt-6">
+      <h1 className="text-[1.4rem] text-blue-700 mb-5">
+        Additional Option
+      </h1>
+      <div className="space-y-5">
+        <div className="flex justify-between items-center">
+          <div className="flex-1">
+            <h1 className="text-[1.2rem] text-blue-600">
+              Enable Reminder
+            </h1>
+            <h1 className="text-[1rem] text-blue-500">
+              Send reminders before task due date
+            </h1>
+          </div>
+          <div
+            onClick={() => setEnableReminder((prev) => !prev)}
+            className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors ${enableReminder ? "bg-blue-600" : "bg-gray-200"
+              }`}
+          >
+            <div
+              className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${enableReminder ? "translate-x-5" : "translate-x-0"
+                }`}
+            ></div>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center">
+          <div className="flex-1">
+            <h1 className="text-[1.2rem] text-blue-600">
+              Require Attachment
+            </h1>
+            <h1 className="text-[1rem] text-blue-500">
+              User must upload a file when completing task
+            </h1>
+          </div>
+          <div
+            onClick={() => setRequireAttachment((prev) => !prev)}
+            className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors ${requireAttachment ? "bg-blue-600" : "bg-gray-200"
+              }`}
+          >
+            <div
+              className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${requireAttachment
+                ? "translate-x-5"
+                : "translate-x-0"
+                }`}
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* submit button */}
+    <div className="pt-4">
+      <button
+        type="submit"
+        disabled={loaderSubmit}
+        className={`w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${loaderSubmit ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+      >
+        {loaderSubmit && (
+          <LoaderIcon className="animate-spin w-4 h-4" />
+        )}
+        {loaderSubmit ? "Assigning..." : "Assign Task"}
+      </button>
+    </div>
+  </>
+)}
 
             {selectedTaskType === "Repair" && (
-              <>
-                {/* Department Dropdown */}
-                <div>
-                  <label
-                    htmlFor="repairDepartment"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Department
-                  </label>
-                  <select
-                    id="repairDepartment"
-                    value={selectedDepartment}
-                    onChange={(e) => handleDepartmentChange(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select Department</option>
-                    {departmentOptions.map((dept, index) => (
-                      <option key={index} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+  <>
+    {/* Machine Department Dropdown for Repair */}
+    <div>
+      <label
+        htmlFor="repairMachineDepartment"
+        className="block text-sm font-medium text-gray-700 mb-1"
+      >
+        Machine Department
+      </label>
+      <select
+        id="repairMachineDepartment"
+        value={machineDepartment}
+        onChange={(e) => handleMachineDepartmentChange(e.target.value)}
+        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+      >
+        <option value="">Select Machine Department</option>
+        {departmentOptions.map((dept, index) => (
+          <option key={index} value={dept}>
+            {dept}
+          </option>
+        ))}
+      </select>
+    </div>
 
-                <div className="block md:flex md:justify-between md:space-x-4">
-                  {/* Left Section */}
-                  <div className="w-full md:w-[45%] space-y-4 mb-4 md:mb-0">
-                    {/* Machine Name Dropdown */}
-                    <div>
-                      <label htmlFor="machineName" className="block text-sm font-medium text-gray-700 mb-1">
-                        Machine Name
-                      </label>
-                      <select
-                        id="machineName"
-                        value={selectedMachine}
-                        onChange={(e) => handleMachineChange(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        disabled={!selectedDepartment}
-                      >
-                        <option value="">Select Machine</option>
-                        {loaderMasterSheetData ? (
-                          <option className="flex gap-5 items-center justify-center">
-                            <Loader2Icon className="animate-spin text-red-500" />
-                            <h1>Wait Please...</h1>
-                          </option>
-                        ) : (
-                          filteredMachines.map((machineName, index) => (
-                            <option key={index} value={machineName}>
-                              {machineName}
-                            </option>
-                          ))
-                        )}
-                      </select>
-                    </div>
+    {/* Doer Department Dropdown for Repair */}
+    <div className="mt-4">
+      <label
+        htmlFor="repairDoerDepartment"
+        className="block text-sm font-medium text-gray-700 mb-1"
+      >
+        Doer Department
+      </label>
+      <select
+        id="repairDoerDepartment"
+        value={doerDepartment}
+        onChange={(e) => handleDoerDepartmentChange(e.target.value)}
+        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+      >
+        <option value="">Select Doer Department</option>
+        {departmentOptions.map((dept, index) => (
+          <option key={index} value={dept}>
+            {dept}
+          </option>
+        ))}
+      </select>
+    </div>
 
-                    {/* Tag No Dropdown */}
-                    {selectedMachine && !loaderSheetData && (
-                      <div>
-                        <label htmlFor="serialNo" className="block text-sm font-medium text-gray-700 mb-1">
-                          Tag Number
-                        </label>
-                        <select
-                          id="serialNo"
-                          onChange={(e) => setSelectedSerialNo(e.target.value)}
-                          className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="">Select Tag No</option>
-                          {filteredSerials.map((serial, idx) => (
-                            <option key={idx} value={serial}>
-                              {serial}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    {/* Machine Part Name */}
-                    <div>
-                      <label htmlFor="partName" className="block text-sm font-medium text-gray-700 mb-1">
-                        Machine Part Name
-                      </label>
-                      <input
-                        type="text"
-                        id="partName"
-                        value={partName}
-                        onChange={(e) => setPartName(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter part name"
-                      />
-                    </div>
-
-                    {/* Given By */}
-                    <div>
-                      <label htmlFor="givenBy" className="block text-sm font-medium text-gray-700 mb-1">
-                        Given By
-                      </label>
-                      <select
-                        id="givenBy"
-                        onChange={(e) => setSelectedGivenBy(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Given By</option>
-                        {loaderMasterSheetData ? (
-                          <option className="flex gap-5 items-center justify-center">
-                            <Loader2Icon className="animate-spin text-red-500" />
-                            <h1>Wait Please...</h1>
-                          </option>
-                        ) : (
-                          giveByData.map((item, index) =>
-                            item ? (
-                              <option key={index} value={item}>
-                                {item}
-                              </option>
-                            ) : null
-                          )
-                        )}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Right Section */}
-                  <div className="w-full md:w-[45%] space-y-4">
-                    {/* Doer Name */}
-                    <div>
-                      <label htmlFor="doerName" className="block text-sm font-medium text-gray-700 mb-1">
-                        Doer's Name
-                      </label>
-                      <select
-                        id="doerName"
-                        onChange={(e) => setSelectedDoerName(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Doer Name</option>
-                        {loaderMasterSheetData ? (
-                          <option className="flex gap-5 items-center justify-center">
-                            <Loader2Icon className="animate-spin text-red-500" />
-                            <h1>Wait Please...</h1>
-                          </option>
-                        ) : (
-                          doerName.map((item, index) =>
-                            item ? (
-                              <option key={index} value={item}>
-                                {item}
-                              </option>
-                            ) : null
-                          )
-                        )}
-                      </select>
-                    </div>
-
-                    {/* Priority */}
-                    <div>
-                      <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
-                        Priority
-                      </label>
-                      <select
-                        id="priority"
-                        onChange={(e) => setSelectedPriority(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Priority</option>
-                        {loaderMasterSheetData ? (
-                          <option className="flex gap-5 items-center justify-center">
-                            <Loader2Icon className="animate-spin text-red-500" />
-                            <h1>Wait Please...</h1>
-                          </option>
-                        ) : (
-                          priorityData.map((item, index) =>
-                            item ? (
-                              <option key={index} value={item}>
-                                {item}
-                              </option>
-                            ) : null
-                          )
-                        )}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Problem With Machine */}
-                <div className="mt-4">
-                  <label htmlFor="machineProblem" className="block text-sm font-medium text-gray-700 mb-1">
-                    Problem With Machine
-                  </label>
-                  <textarea
-                    id="machineProblem"
-                    onChange={(e) => setWorkDescription(e.target.value)}
-                    value={description}
-                    rows={3}
-                    className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Describe the problem..."
-                  />
-                </div>
-
-                {/* Start & End Dates */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-                  <div>
-                    <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">
-                      Task Start Date
-                    </label>
-                    <input
-                      type="date"
-                      id="startDate"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="startTime" className="block text-sm font-medium text-gray-700">
-                      Task Start Time
-                    </label>
-                    <input
-                      type="time"
-                      id="startTime"
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">
-                      Task End Date
-                    </label>
-                    <input
-                      type="date"
-                      id="endDate"
-                      value={endTaskDate}
-                      onChange={(e) => setEndTaskDate(e.target.value)}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="endTime" className="block text-sm font-medium text-gray-700">
-                      Task End Time
-                    </label>
-                    <input
-                      type="time"
-                      id="endTime"
-                      value={endTime}
-                      onChange={(e) => setEndTime(e.target.value)}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2"
-                    />
-                  </div>
-                </div>
-
-                {/* Additional Options */}
-                <div className="w-full pt-6">
-                  <h1 className="text-[1.4rem] text-blue-700 mb-5">Additional Option</h1>
-                  <div className="space-y-5">
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <h1 className="text-[1.2rem] text-blue-600">Enable Reminder</h1>
-                        <h1 className="text-[1rem] text-blue-500">Send reminders before task due date</h1>
-                      </div>
-                      <div
-                        onClick={() => setEnableReminder((prev) => !prev)}
-                        className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors ${enableReminder ? "bg-blue-600" : "bg-gray-200"
-                          }`}
-                      >
-                        <div
-                          className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${enableReminder ? "translate-x-5" : "translate-x-0"
-                            }`}
-                        ></div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <h1 className="text-[1.2rem] text-blue-600">Require Attachment</h1>
-                        <h1 className="text-[1rem] text-blue-500">User must upload a file when completing task</h1>
-                      </div>
-                      <div
-                        onClick={() => setRequireAttachment((prev) => !prev)}
-                        className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors ${requireAttachment ? "bg-blue-600" : "bg-gray-200"
-                          }`}
-                      >
-                        <div
-                          className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${requireAttachment ? "translate-x-5" : "translate-x-0"
-                            }`}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Image Upload */}
-                <div className="pt-4">
-                  <label htmlFor="machineImage" className="block text-sm font-medium text-gray-700 mb-1">
-                    Upload Machine Image (Optional)
-                  </label>
-                  <input
-                    type="file"
-                    id="machineImage"
-                    accept="image/*"
-                    onChange={(e) => setImageFile(e.target.files[0])}
-                    className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white"
-                  />
-                </div>
-
-                {/* Submit Button */}
-                <div className="pt-4">
-                  <button
-                    type="submit"
-                    disabled={loaderSubmit}
-                    className={`w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${loaderSubmit ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                  >
-                    {loaderSubmit && <LoaderIcon className="animate-spin w-4 h-4" />}
-                    {loaderSubmit ? "Assigning..." : "Assign Task"}
-                  </button>
-                </div>
-              </>
+    <div className="block md:flex md:justify-between md:space-x-4">
+      {/* Left Section */}
+      <div className="w-full md:w-[45%] space-y-4 mb-4 md:mb-0">
+        {/* Machine Name Dropdown - Only enabled when machine department is selected */}
+        <div>
+          <label htmlFor="machineName" className="block text-sm font-medium text-gray-700 mb-1">
+            Machine Name
+          </label>
+          <select
+            id="machineName"
+            value={selectedMachine}
+            onChange={(e) => handleMachineChange(e.target.value)}
+            className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            disabled={!machineDepartment}
+          >
+            <option value="">Select Machine</option>
+            {loaderMasterSheetData ? (
+              <option className="flex gap-5 items-center justify-center">
+                <Loader2Icon className="animate-spin text-red-500" />
+                <h1>Wait Please...</h1>
+              </option>
+            ) : (
+              filteredMachines.map((machineName, index) => (
+                <option key={index} value={machineName}>
+                  {machineName}
+                </option>
+              ))
             )}
+          </select>
+        </div>
+
+        {/* Tag No Dropdown */}
+        {selectedMachine && !loaderSheetData && (
+          <div>
+            <label htmlFor="serialNo" className="block text-sm font-medium text-gray-700 mb-1">
+              Tag Number
+            </label>
+            <select
+              id="serialNo"
+              onChange={(e) => setSelectedSerialNo(e.target.value)}
+              className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Select Tag No</option>
+              {filteredSerials.map((serial, idx) => (
+                <option key={idx} value={serial}>
+                  {serial}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Machine Part Name */}
+        <div>
+          <label htmlFor="partName" className="block text-sm font-medium text-gray-700 mb-1">
+            Machine Part Name
+          </label>
+          <input
+            type="text"
+            id="partName"
+            value={partName}
+            onChange={(e) => setPartName(e.target.value)}
+            className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Enter part name"
+          />
+        </div>
+
+        {/* Given By */}
+        <div>
+          <label htmlFor="givenBy" className="block text-sm font-medium text-gray-700 mb-1">
+            Given By
+          </label>
+          <select
+            id="givenBy"
+            onChange={(e) => setSelectedGivenBy(e.target.value)}
+            className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Select Given By</option>
+            {loaderMasterSheetData ? (
+              <option className="flex gap-5 items-center justify-center">
+                <Loader2Icon className="animate-spin text-red-500" />
+                <h1>Wait Please...</h1>
+              </option>
+            ) : (
+              giveByData.map((item, index) =>
+                item ? (
+                  <option key={index} value={item}>
+                    {item}
+                  </option>
+                ) : null
+              )
+            )}
+          </select>
+        </div>
+      </div>
+
+      {/* Right Section */}
+      <div className="w-full md:w-[45%] space-y-4">
+        {/* Doer's Name - Only enabled when doer department is selected */}
+        <div>
+          <label htmlFor="doerName" className="block text-sm font-medium text-gray-700 mb-1">
+            Doer's Name
+          </label>
+          <select
+            id="doerName"
+            onChange={(e) => setSelectedDoerName(e.target.value)}
+            className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            disabled={!doerDepartment}
+          >
+            <option value="">Select Doer Name</option>
+            {loaderMasterSheetData ? (
+              <option className="flex gap-5 items-center justify-center">
+                <Loader2Icon className="animate-spin text-red-500" />
+                <h1>Wait Please...</h1>
+              </option>
+            ) : (
+              doerName.map((item, index) =>
+                item ? (
+                  <option key={index} value={item}>
+                    {item}
+                  </option>
+                ) : null
+              )
+            )}
+          </select>
+        </div>
+
+        {/* Priority */}
+        <div>
+          <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
+            Priority
+          </label>
+          <select
+            id="priority"
+            onChange={(e) => setSelectedPriority(e.target.value)}
+            className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Select Priority</option>
+            {loaderMasterSheetData ? (
+              <option className="flex gap-5 items-center justify-center">
+                <Loader2Icon className="animate-spin text-red-500" />
+                <h1>Wait Please...</h1>
+              </option>
+            ) : (
+              priorityData.map((item, index) =>
+                item ? (
+                  <option key={index} value={item}>
+                    {item}
+                  </option>
+                ) : null
+              )
+            )}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    {/* Problem With Machine */}
+    <div className="mt-4">
+      <label htmlFor="machineProblem" className="block text-sm font-medium text-gray-700 mb-1">
+        Problem With Machine
+      </label>
+      <textarea
+        id="machineProblem"
+        onChange={(e) => setWorkDescription(e.target.value)}
+        value={description}
+        rows={3}
+        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        placeholder="Describe the problem..."
+      />
+    </div>
+
+    {/* Start & End Dates */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+      <div>
+        <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">
+          Task Start Date
+        </label>
+        <input
+          type="date"
+          id="startDate"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="startTime" className="block text-sm font-medium text-gray-700">
+          Task Start Time
+        </label>
+        <input
+          type="time"
+          id="startTime"
+          value={startTime}
+          onChange={(e) => setStartTime(e.target.value)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">
+          Task End Date
+        </label>
+        <input
+          type="date"
+          id="endDate"
+          value={endTaskDate}
+          onChange={(e) => setEndTaskDate(e.target.value)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="endTime" className="block text-sm font-medium text-gray-700">
+          Task End Time
+        </label>
+        <input
+          type="time"
+          id="endTime"
+          value={endTime}
+          onChange={(e) => setEndTime(e.target.value)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2"
+        />
+      </div>
+    </div>
+
+    {/* Additional Options */}
+    <div className="w-full pt-6">
+      <h1 className="text-[1.4rem] text-blue-700 mb-5">Additional Option</h1>
+      <div className="space-y-5">
+        <div className="flex justify-between items-center">
+          <div className="flex-1">
+            <h1 className="text-[1.2rem] text-blue-600">Enable Reminder</h1>
+            <h1 className="text-[1rem] text-blue-500">Send reminders before task due date</h1>
+          </div>
+          <div
+            onClick={() => setEnableReminder((prev) => !prev)}
+            className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors ${enableReminder ? "bg-blue-600" : "bg-gray-200"
+              }`}
+          >
+            <div
+              className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${enableReminder ? "translate-x-5" : "translate-x-0"
+                }`}
+            ></div>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center">
+          <div className="flex-1">
+            <h1 className="text-[1.2rem] text-blue-600">Require Attachment</h1>
+            <h1 className="text-[1rem] text-blue-500">User must upload a file when completing task</h1>
+          </div>
+          <div
+            onClick={() => setRequireAttachment((prev) => !prev)}
+            className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors ${requireAttachment ? "bg-blue-600" : "bg-gray-200"
+              }`}
+          >
+            <div
+              className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${requireAttachment ? "translate-x-5" : "translate-x-0"
+                }`}
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Image Upload */}
+    <div className="pt-4">
+      <label htmlFor="machineImage" className="block text-sm font-medium text-gray-700 mb-1">
+        Upload Machine Image (Optional)
+      </label>
+      <input
+        type="file"
+        id="machineImage"
+        accept="image/*"
+        onChange={(e) => setImageFile(e.target.files[0])}
+        className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white"
+      />
+    </div>
+
+    {/* Submit Button */}
+    <div className="pt-4">
+      <button
+        type="submit"
+        disabled={loaderSubmit}
+        className={`w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${loaderSubmit ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+      >
+        {loaderSubmit && <LoaderIcon className="animate-spin w-4 h-4" />}
+        {loaderSubmit ? "Assigning..." : "Assign Task"}
+      </button>
+    </div>
+  </>
+)}
 
           </form>
         </div>
